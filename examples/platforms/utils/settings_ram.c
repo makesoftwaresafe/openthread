@@ -29,7 +29,6 @@
 /**
  * @file
  *   This file implements OpenThread platform abstraction for storage of settings in RAM.
- *
  */
 
 #include "settings.h"
@@ -66,10 +65,7 @@ void otPlatSettingsInit(otInstance *aInstance, const uint16_t *aSensitiveKeys, u
     sSettingsBufLength = 0;
 }
 
-void otPlatSettingsDeinit(otInstance *aInstance)
-{
-    OT_UNUSED_VARIABLE(aInstance);
-}
+void otPlatSettingsDeinit(otInstance *aInstance) { OT_UNUSED_VARIABLE(aInstance); }
 
 otError otPlatSettingsGet(otInstance *aInstance, uint16_t aKey, int aIndex, uint8_t *aValue, uint16_t *aValueLength)
 {
@@ -229,9 +225,6 @@ otError otPlatSettingsDelete(otInstance *aInstance, uint16_t aKey, int aIndex)
     return error;
 }
 
-void otPlatSettingsWipe(otInstance *aInstance)
-{
-    otPlatSettingsInit(aInstance, NULL, 0);
-}
+void otPlatSettingsWipe(otInstance *aInstance) { otPlatSettingsInit(aInstance, NULL, 0); }
 
 #endif // OPENTHREAD_SETTINGS_RAM

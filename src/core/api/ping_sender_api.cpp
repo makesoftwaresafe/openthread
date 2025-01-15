@@ -33,10 +33,7 @@
 
 #include "openthread-core-config.h"
 
-#include <openthread/ping_sender.h>
-
-#include "common/as_core_type.hpp"
-#include "common/locator_getters.hpp"
+#include "instance/instance.hpp"
 
 using namespace ot;
 
@@ -47,9 +44,6 @@ otError otPingSenderPing(otInstance *aInstance, const otPingSenderConfig *aConfi
     return AsCoreType(aInstance).Get<Utils::PingSender>().Ping(AsCoreType(aConfig));
 }
 
-void otPingSenderStop(otInstance *aInstance)
-{
-    AsCoreType(aInstance).Get<Utils::PingSender>().Stop();
-}
+void otPingSenderStop(otInstance *aInstance) { AsCoreType(aInstance).Get<Utils::PingSender>().Stop(); }
 
 #endif // OPENTHREAD_CONFIG_PING_SENDER_ENABLE

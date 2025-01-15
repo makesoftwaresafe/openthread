@@ -33,29 +33,38 @@
 
 #include "radio.hpp"
 
-#include "common/instance.hpp"
-#include "common/locator_getters.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 
 void Radio::Callbacks::HandleReceiveDone(Mac::RxFrame *aFrame, Error aError)
 {
+#if OPENTHREAD_CONFIG_RADIO_STATS_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
+    Get<Radio::Statistics>().RecordRxDone(aError);
+#endif
     Get<Mac::SubMac>().HandleReceiveDone(aFrame, aError);
 }
 
-void Radio::Callbacks::HandleTransmitStarted(Mac::TxFrame &aFrame)
-{
-    Get<Mac::SubMac>().HandleTransmitStarted(aFrame);
-}
+void Radio::Callbacks::HandleTransmitStarted(Mac::TxFrame &aFrame) { Get<Mac::SubMac>().HandleTransmitStarted(aFrame); }
 
 void Radio::Callbacks::HandleTransmitDone(Mac::TxFrame &aFrame, Mac::RxFrame *aAckFrame, Error aError)
 {
+#if OPENTHREAD_CONFIG_RADIO_STATS_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
+    Get<Radio::Statistics>().RecordTxDone(aError, aFrame.GetLength());
+#endif
     Get<Mac::SubMac>().HandleTransmitDone(aFrame, aAckFrame, aError);
 }
 
-void Radio::Callbacks::HandleEnergyScanDone(int8_t aMaxRssi)
+void Radio::Callbacks::HandleEnergyScanDone(int8_t aMaxRssi) { Get<Mac::SubMac>().HandleEnergyScanDone(aMaxRssi); }
+
+void Radio::Callbacks::HandleBusLatencyChanged(void)
 {
-    Get<Mac::SubMac>().HandleEnergyScanDone(aMaxRssi);
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+    Get<CslTxScheduler>().UpdateFrameRequestAhead();
+#endif
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    Get<WakeupTxScheduler>().UpdateFrameRequestAhead();
+#endif
 }
 
 #if OPENTHREAD_CONFIG_DIAG_ENABLE

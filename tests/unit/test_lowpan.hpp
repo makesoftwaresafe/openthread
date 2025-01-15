@@ -32,7 +32,7 @@
 #include <stdint.h>
 
 #include "common/code_utils.hpp"
-#include "common/instance.hpp"
+#include "instance/instance.hpp"
 #include "mac/mac.hpp"
 #include "net/ip6_headers.hpp"
 #include "thread/lowpan.hpp"
@@ -57,7 +57,6 @@ public:
 
     /**
      * Default constructor for the object.
-     *
      */
     explicit TestIphcVector(const char *aTestName)
     {
@@ -68,47 +67,42 @@ public:
     }
 
     /**
-     * This method sets long MAC source address.
+     * Sets long MAC source address.
      *
      * @param aAddress Pointer to the long MAC address.
-     *
      */
-    void SetMacSource(const uint8_t *aAddress) { mMacSource.SetExtended(aAddress); }
+    void SetMacSource(const uint8_t *aAddress) { mMacAddrs.mSource.SetExtended(aAddress); }
 
     /**
-     * This method sets short MAC source address.
+     * Sets short MAC source address.
      *
      * @param aAddress Short MAC address.
-     *
      */
-    void SetMacSource(uint16_t aAddress) { mMacSource.SetShort(aAddress); }
+    void SetMacSource(uint16_t aAddress) { mMacAddrs.mSource.SetShort(aAddress); }
 
     /**
-     * This method sets long MAC destination address.
+     * Sets long MAC destination address.
      *
      * @param aAddress Pointer to the long MAC address.
-     *
      */
-    void SetMacDestination(const uint8_t *aAddress) { mMacDestination.SetExtended(aAddress); }
+    void SetMacDestination(const uint8_t *aAddress) { mMacAddrs.mDestination.SetExtended(aAddress); }
 
     /**
-     * This method sets short MAC destination address.
+     * Sets short MAC destination address.
      *
      * @param aAddress Short MAC address.
-     *
      */
-    void SetMacDestination(uint16_t aAddress) { mMacDestination.SetShort(aAddress); }
+    void SetMacDestination(uint16_t aAddress) { mMacAddrs.mDestination.SetShort(aAddress); }
 
     /**
-     * This method gets the IPv6 header
+     * Gets the IPv6 header
      *
      * @returns the IPv6 header.
-     *
      */
     const Ip6::Header &GetIpHeader(void) const { return mIpHeader; }
 
     /**
-     * This method initializes IPv6 Header.
+     * Initializes IPv6 Header.
      *
      * @param aVersionClassFlow Value of the Version, Traffic class and Flow control fields.
      * @param aPayloadLength    Value of the payload length field.
@@ -116,7 +110,6 @@ public:
      * @param aHopLimit         Value of the hop limit field.
      * @param aSource           String represents IPv6 source address.
      * @param aDestination      String represents IPv6 destination address.
-     *
      */
     void SetIpHeader(uint32_t    aVersionClassFlow,
                      uint16_t    aPayloadLength,
@@ -134,7 +127,7 @@ public:
     }
 
     /**
-     * This method initializes IPv6 Encapsulated Header.
+     * Initializes IPv6 Encapsulated Header.
      *
      * @param aVersionClassFlow Value of the Version, Traffic class and Flow control fields.
      * @param aPayloadLength    Value of the payload length field.
@@ -142,7 +135,6 @@ public:
      * @param aHopLimit         Value of the hop limit field.
      * @param aSource           String represents IPv6 source address.
      * @param aDestination      String represents IPv6 destination address.
-     *
      */
     void SetIpTunneledHeader(uint32_t    aVersionClassFlow,
                              uint16_t    aPayloadLength,
@@ -160,11 +152,10 @@ public:
     }
 
     /**
-     * This method initializes IPv6 Extension Header.
+     * Initializes IPv6 Extension Header.
      *
      * @param aExtHeader        Pointer to the extension header data.
      * @param aExtHeaderLength  Length of the extension header data.
-     *
      */
     void SetExtHeader(const uint8_t *aExtHeader, uint16_t aExtHeaderLength)
     {
@@ -173,13 +164,12 @@ public:
     }
 
     /**
-     * This method initializes UDP Header.
+     * Initializes UDP Header.
      *
      * @param aSource       Value of the source port.
      * @param aDestination  Value of the destination port.
      * @param aLength       Value of the length field.
      * @param aChecksum     Value of the checksum field.
-     *
      */
     void SetUDPHeader(uint16_t aSource, uint16_t aDestination, uint16_t aLength, uint16_t aChecksum)
     {
@@ -190,11 +180,10 @@ public:
     }
 
     /**
-     * This method initializes LOWPAN_IPHC Header.
+     * Initializes LOWPAN_IPHC Header.
      *
      * @param aIphc        Pointer to the LOWPAN_IPHC header.
      * @param aIphcLength  Length of the LOWPAN_IPHC header.
-     *
      */
     void SetIphcHeader(const uint8_t *aIphc, uint16_t aIphcLength)
     {
@@ -203,19 +192,17 @@ public:
     }
 
     /**
-     * This method sets the expect result of the compression / decompression procedure.
+     * Sets the expect result of the compression / decompression procedure.
      *
      * @param aError  Expected result.
-     *
      */
     void SetError(Error aError) { mError = aError; }
 
     /**
-     * This method initializes IPv6 Payload (uncompressed data).
+     * Initializes IPv6 Payload (uncompressed data).
      *
      * @param aPayload  Pointer to the payload data.
      * @param aLength   Length of the payload data.
-     *
      */
     void SetPayload(const uint8_t *aPayload, uint16_t aLength)
     {
@@ -224,45 +211,39 @@ public:
     }
 
     /**
-     * This method sets the offset from the beginning of the IPv6 header to the uncompressed
+     * Sets the offset from the beginning of the IPv6 header to the uncompressed
      * payload.
      *
      * @param aPayloadOffset  The offset from the beginning of the IPv6 header to the uncompressed
      *                        payload.
-     *
      */
     void SetPayloadOffset(uint16_t aPayloadOffset) { mPayloadOffset = aPayloadOffset; }
 
     /**
-     * This method returns compressed LOWPAN_IPHC frame.
+     * Returns compressed LOWPAN_IPHC frame.
      *
      * @returns The compressed stream.
-     *
      */
     void GetCompressedStream(uint8_t *aIphc, uint16_t &aIphcLength);
 
     /**
-     * This method returns message object with the uncompressed IPv6 packet.
+     * Returns message object with the uncompressed IPv6 packet.
      *
      * @returns The message object with the uncompressed IPv6 packet.
-     *
      */
     void GetUncompressedStream(Message &aMessage);
 
     /**
-     * This method returns data with the uncompressed IPv6 packet.
+     * Returns data with the uncompressed IPv6 packet.
      *
      * @returns The data with the uncompressed IPv6 packet.
-     *
      */
     void GetUncompressedStream(uint8_t *aIp6, uint16_t &aIp6Length);
 
     /**
      * This fields represent uncompressed IPv6 packet.
-     *
      */
-    Mac::Address     mMacSource;
-    Mac::Address     mMacDestination;
+    Mac::Addresses   mMacAddrs;
     Ip6::Header      mIpHeader;
     Payload          mExtHeader;
     Ip6::Header      mIpTunneledHeader;
@@ -270,7 +251,6 @@ public:
 
     /**
      * This fields represent compressed IPv6 packet.
-     *
      */
     Payload         mIphcHeader;
     uint16_t        mPayloadOffset;
@@ -279,7 +259,6 @@ public:
 
     /**
      * General purpose fields.
-     *
      */
     Payload     mPayload;
     Error       mError;

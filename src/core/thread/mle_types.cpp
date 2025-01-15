@@ -33,10 +33,17 @@
 
 #include "mle_types.hpp"
 
+#include "common/array.hpp"
 #include "common/code_utils.hpp"
+#include "common/message.hpp"
+#include "common/random.hpp"
+#include "utils/static_counter.hpp"
 
 namespace ot {
 namespace Mle {
+
+//---------------------------------------------------------------------------------------------------------------------
+// DeviceMode
 
 void DeviceMode::Get(ModeConfig &aModeConfig) const
 {
@@ -61,6 +68,149 @@ DeviceMode::InfoString DeviceMode::ToString(void) const
                   ToYesNo(GetNetworkDataType() == NetworkData::kFullSet));
 
     return string;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+// DeviceProperties
+
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MLE_DEVICE_PROPERTY_LEADER_WEIGHT_ENABLE
+
+DeviceProperties::DeviceProperties(void)
+{
+    Clear();
+
+    mPowerSupply            = OPENTHREAD_CONFIG_DEVICE_POWER_SUPPLY;
+    mLeaderWeightAdjustment = kDefaultAdjustment;
+#if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+    mIsBorderRouter = true;
+#endif
+}
+
+void DeviceProperties::ClampWeightAdjustment(void)
+{
+    mLeaderWeightAdjustment = Clamp(mLeaderWeightAdjustment, kMinAdjustment, kMaxAdjustment);
+}
+
+uint8_t DeviceProperties::CalculateLeaderWeight(void) const
+{
+    static const int8_t kPowerSupplyIncs[] = {
+        kPowerBatteryInc,          // (0) kPowerSupplyBattery
+        kPowerExternalInc,         // (1) kPowerSupplyExternal
+        kPowerExternalStableInc,   // (2) kPowerSupplyExternalStable
+        kPowerExternalUnstableInc, // (3) kPowerSupplyExternalUnstable
+    };
+
+    struct EnumCheck
+    {
+        InitEnumValidatorCounter();
+        ValidateNextEnum(kPowerSupplyBattery);
+        ValidateNextEnum(kPowerSupplyExternal);
+        ValidateNextEnum(kPowerSupplyExternalStable);
+        ValidateNextEnum(kPowerSupplyExternalUnstable);
+    };
+
+    uint8_t     weight      = kBaseWeight;
+    PowerSupply powerSupply = MapEnum(mPowerSupply);
+
+    if (mIsBorderRouter)
+    {
+        weight += (mSupportsCcm ? kCcmBorderRouterInc : kBorderRouterInc);
+    }
+
+    if (powerSupply < GetArrayLength(kPowerSupplyIncs))
+    {
+        weight += kPowerSupplyIncs[powerSupply];
+    }
+
+    if (mIsUnstable)
+    {
+        switch (powerSupply)
+        {
+        case kPowerSupplyBattery:
+        case kPowerSupplyExternalUnstable:
+            break;
+
+        default:
+            weight += kIsUnstableInc;
+        }
+    }
+
+    weight += mLeaderWeightAdjustment;
+
+    return weight;
+}
+
+#endif // #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MLE_DEVICE_PROPERTY_LEADER_WEIGHT_ENABLE
+
+//---------------------------------------------------------------------------------------------------------------------
+// RouterIdSet
+
+uint8_t RouterIdSet::GetNumberOfAllocatedIds(void) const
+{
+    uint8_t count = 0;
+
+    for (uint8_t byte : mRouterIdSet)
+    {
+        count += CountBitsInMask(byte);
+    }
+
+    return count;
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+// TxChallenge
+
+void TxChallenge::GenerateRandom(void) { IgnoreError(Random::Crypto::Fill(*this)); }
+
+//---------------------------------------------------------------------------------------------------------------------
+// RxChallenge
+
+Error RxChallenge::ReadFrom(const Message &aMessage, const OffsetRange &aOffsetRange)
+{
+    Error       error       = kErrorNone;
+    OffsetRange offsetRange = aOffsetRange;
+
+    Clear();
+
+    offsetRange.ShrinkLength(kMaxSize);
+
+    VerifyOrExit(offsetRange.Contains(kMinSize), error = kErrorParse);
+
+    SuccessOrExit(error = aMessage.Read(offsetRange, mArray.GetArrayBuffer(), offsetRange.GetLength()));
+    mArray.SetLength(static_cast<uint8_t>(offsetRange.GetLength()));
+
+exit:
+    return error;
+}
+
+bool RxChallenge::operator==(const TxChallenge &aTxChallenge) const
+{
+    return (mArray.GetLength() == kMaxSize) && (memcmp(mArray.GetArrayBuffer(), aTxChallenge.m8, kMaxSize) == 0);
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+
+const char *RoleToString(DeviceRole aRole)
+{
+    static const char *const kRoleStrings[] = {
+        "disabled", // (0) kRoleDisabled
+        "detached", // (1) kRoleDetached
+        "child",    // (2) kRoleChild
+        "router",   // (3) kRoleRouter
+        "leader",   // (4) kRoleLeader
+    };
+
+    struct EnumCheck
+    {
+        InitEnumValidatorCounter();
+        ValidateNextEnum(kRoleDisabled);
+        ValidateNextEnum(kRoleDetached);
+        ValidateNextEnum(kRoleChild);
+        ValidateNextEnum(kRoleRouter);
+        ValidateNextEnum(kRoleLeader);
+    };
+
+    return (aRole < GetArrayLength(kRoleStrings)) ? kRoleStrings[aRole] : "invalid";
 }
 
 } // namespace Mle

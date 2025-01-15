@@ -53,14 +53,30 @@
 #if OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE
 #include <openthread/srp_client.h>
 #endif
+#include <openthread/platform/dnssd.h>
 
 #include "changed_props_set.hpp"
-#include "common/instance.hpp"
 #include "common/tasklet.hpp"
+#include "instance/instance.hpp"
 #include "lib/spinel/spinel.h"
 #include "lib/spinel/spinel_buffer.hpp"
 #include "lib/spinel/spinel_decoder.hpp"
 #include "lib/spinel/spinel_encoder.hpp"
+#include "lib/spinel/spinel_prop_codec.hpp"
+
+#if OPENTHREAD_CONFIG_MULTIPAN_RCP_ENABLE
+#define SPINEL_HEADER_IID_BROADCAST OPENTHREAD_SPINEL_CONFIG_BROADCAST_IID
+#else
+#define SPINEL_HEADER_IID_BROADCAST SPINEL_HEADER_IID_0
+#endif
+
+// In case of host<->ncp<->rcp configuration, notifications shall be
+// received on broadcast iid on ncp, but transmitted on IID 0 to host.
+#if OPENTHREAD_CONFIG_MULTIPAN_RCP_ENABLE && OPENTHREAD_RADIO
+#define SPINEL_HEADER_TX_NOTIFICATION_IID SPINEL_HEADER_IID_BROADCAST
+#else
+#define SPINEL_HEADER_TX_NOTIFICATION_IID SPINEL_HEADER_IID_0
+#endif
 
 namespace ot {
 namespace Ncp {
@@ -72,26 +88,81 @@ public:
     {
         kSpinelCmdHeaderSize = 2, ///< Size of spinel command header (in bytes).
         kSpinelPropIdSize    = 3, ///< Size of spinel property identifier (in bytes).
+#if OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE && OPENTHREAD_RADIO
+        kSpinelInterfaceCount = SPINEL_HEADER_IID_MAX + 1, // Number of supported spinel interfaces
+#else
+        kSpinelInterfaceCount = 1, // Only one interface supported in single instance configuration
+#endif
     };
 
     /**
-     * This constructor creates and initializes an NcpBase instance.
+     * Creates and initializes an NcpBase instance.
      *
      * @param[in]  aInstance  The OpenThread instance structure.
-     *
      */
     explicit NcpBase(Instance *aInstance);
 
+#if OPENTHREAD_CONFIG_MULTIPAN_RCP_ENABLE && OPENTHREAD_RADIO
     /**
-     * This static method returns the pointer to the single NCP instance.
+     * Creates and initializes an NcpBase instance.
+     *
+     * @param[in]  aInstances  The OpenThread instances structure pointer array.
+     * @param[in]  aCount      Number of the instances in the array.
+     */
+    explicit NcpBase(Instance **aInstances, uint8_t aCount);
+
+#endif // OPENTHREAD_CONFIG_MULTIPAN_RCP_ENABLE && OPENTHREAD_RADIO
+
+    /**
+     * Returns the pointer to the single NCP instance.
      *
      * @returns Pointer to the single NCP instance.
-     *
      */
     static NcpBase *GetNcpInstance(void);
 
     /**
-     * This method sends data to host via specific stream.
+     * Returns an IID for the given instance
+     *
+     * Returned IID is an integer value that must be shifted by SPINEL_HEADER_IID_SHIFT before putting into spinel
+     * header. If multipan interface is not enabled or build is not for RCP IID=0 is returned. If nullptr is passed it
+     * matches broadcast IID in current implementation. Broadcast IID is also returned in case no match was found.
+     *
+     * @param[in] aInstance  Instance pointer to match with IID
+     *
+     * @returns Spinel Interface Identifier to use for communication for this instance
+     */
+    uint8_t InstanceToIid(Instance *aInstance);
+
+    /**
+     * Returns an OT instance for the given IID
+     *
+     * Returns an OpenThread instance object associated to the given IID.
+     * If multipan interface is not enabled or build is not for RCP returned value is the same instance object
+     * regardless of the aIid parameter In current implementation nullptr is returned for broadcast IID and values
+     * exceeding the instances count but lower than kSpinelInterfaceCount.
+     *
+     * @param[in] aIid  IID used in the Spinel communication
+     *
+     * @returns OpenThread instance object associated with the given IID
+     */
+    Instance *IidToInstance(uint8_t aIid);
+
+#if OPENTHREAD_CONFIG_MULTIPAN_RCP_ENABLE
+    /**
+     * Called to send notification to host about switchower results.
+     */
+    void NotifySwitchoverDone(otInstance *aInstance, bool aSuccess);
+#endif
+
+    /**
+     * This method returns the IID of the current spinel command.
+     *
+     * @returns IID.
+     */
+    spinel_iid_t GetCurCommandIid(void) const;
+
+    /**
+     * Sends data to host via specific stream.
      *
      *
      * @param[in]  aStreamId  A numeric identifier for the stream to write to.
@@ -104,64 +175,31 @@ public:
      * @retval OT_ERROR_BUSY         There are not enough resources to complete this
      *                               request. This is usually a temporary condition.
      * @retval OT_ERROR_INVALID_ARGS The given aStreamId was invalid.
-     *
      */
     otError StreamWrite(int aStreamId, const uint8_t *aDataPtr, int aDataLen);
 
     /**
-     * This method send an OpenThread log message to host via `SPINEL_PROP_STREAM_LOG` property.
+     * Send an OpenThread log message to host via `SPINEL_PROP_STREAM_LOG` property.
      *
      * @param[in] aLogLevel   The log level
      * @param[in] aLogRegion  The log region
      * @param[in] aLogString  The log string
-     *
      */
     void Log(otLogLevel aLogLevel, otLogRegion aLogRegion, const char *aLogString);
 
 #if OPENTHREAD_CONFIG_NCP_ENABLE_PEEK_POKE
     /**
-     * This method registers peek/poke delegate functions with NCP module.
+     * Registers peek/poke delegate functions with NCP module.
      *
      * @param[in] aAllowPeekDelegate      Delegate function pointer for peek operation.
      * @param[in] aAllowPokeDelegate      Delegate function pointer for poke operation.
-     *
      */
-    void RegisterPeekPokeDelagates(otNcpDelegateAllowPeekPoke aAllowPeekDelegate,
+    void RegisterPeekPokeDelegates(otNcpDelegateAllowPeekPoke aAllowPeekDelegate,
                                    otNcpDelegateAllowPeekPoke aAllowPokeDelegate);
 #endif
 
-#if OPENTHREAD_MTD || OPENTHREAD_FTD
-#if OPENTHREAD_CONFIG_LEGACY_ENABLE
     /**
-     * This callback is invoked by the legacy stack to notify that a new
-     * legacy node did join the network.
-     *
-     * @param[in]   aExtAddr    The extended address of the joined node.
-     *
-     */
-    void HandleLegacyNodeDidJoin(const otExtAddress *aExtAddr);
-
-    /**
-     * This callback is invoked by the legacy stack to notify that the
-     * legacy ULA prefix has changed.
-     *
-     * param[in]    aUlaPrefix  The changed ULA prefix.
-     *
-     */
-    void HandleDidReceiveNewLegacyUlaPrefix(const uint8_t *aUlaPrefix);
-
-    /**
-     * This method registers a set of legacy handlers with NCP.
-     *
-     * @param[in] aHandlers    A pointer to a handler struct.
-     *
-     */
-    void RegisterLegacyHandlers(const otNcpLegacyHandlers *aHandlers);
-#endif
-#endif // OPENTHREAD_MTD || OPENTHREAD_FTD
-
-    /**
-     * This method is called by the framer whenever a framing error is detected.
+     * Is called by the framer whenever a framing error is detected.
      */
     void IncrementFrameErrorCounter(void);
 
@@ -180,12 +218,116 @@ public:
      */
     bool ShouldDeferHostSend(void);
 
+    /**
+     * Check if the infrastructure interface has an IPv6 address.
+     *
+     * @param[in]  aInfraIfIndex  The index of the instructure interface to query.
+     * @param[in]  aAddress       The IPv6 address to query.
+     */
+    bool InfraIfHasAddress(uint32_t aInfraIfIndex, const otIp6Address *aAddress);
+
+    /**
+     * Send a ICMP6 ND message through the Infrastructure interface on the host.
+     *
+     * @param[in]  aInfraIfIndex  The index of the infrastructure interface this message is sent to.
+     * @param[in]  aDestAddress   The destination address this message is sent to.
+     * @param[in]  aBuffer        The ICMPv6 message buffer. The ICMPv6 checksum is left zero and the
+     *                            platform should do the checksum calculate.
+     * @param[in]  aBufferLength  The length of the message buffer.
+     *
+     * @note  Per RFC 4861, the implementation should send the message with IPv6 link-local source address
+     *        of interface @p aInfraIfIndex and IP Hop Limit 255.
+     *
+     * @retval OT_ERROR_NONE    Successfully sent the ICMPv6 message.
+     * @retval OT_ERROR_FAILED  Failed to send the ICMPv6 message.
+     */
+    otError InfraIfSendIcmp6Nd(uint32_t            aInfraIfIndex,
+                               const otIp6Address *aDestAddress,
+                               const uint8_t      *aBuffer,
+                               uint16_t            aBufferLength);
+
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_NCP_DNSSD_ENABLE && OPENTHREAD_CONFIG_PLATFORM_DNSSD_ENABLE
+    /**
+     * Registers or updates a host on the infrastructure network's DNS-SD module (on host).
+     *
+     * @param[in] aHost         Information about the host to register.
+     * @param[in] aRequestId    The ID associated with this request.
+     * @param[in] aCallback     The callback function pointer to report the outcome (may be NULL if no callback needed).
+     */
+    void DnssdRegisterHost(const otPlatDnssdHost      *aHost,
+                           otPlatDnssdRequestId        aRequestId,
+                           otPlatDnssdRegisterCallback aCallback);
+
+    /**
+     * Unregisters a host on the infrastructure network's DNS-SD module (on host).
+     *
+     * @param[in] aHost         Information about the host to register.
+     * @param[in] aRequestId    The ID associated with this request.
+     * @param[in] aCallback     The callback function pointer to report the outcome (may be NULL if no callback needed).
+     */
+    void DnssdUnregisterHost(const otPlatDnssdHost      *aHost,
+                             otPlatDnssdRequestId        aRequestId,
+                             otPlatDnssdRegisterCallback aCallback);
+
+    /**
+     * Registers or updates a service on the infrastructure network's DNS-SD module (on host).
+     *
+     * @param[in] aService      Information about the service to register.
+     * @param[in] aRequestId    The ID associated with this request.
+     * @param[in] aCallback     The callback function pointer to report the outcome (may be NULL if no callback needed).
+     */
+    void DnssdRegisterService(const otPlatDnssdService   *aService,
+                              otPlatDnssdRequestId        aRequestId,
+                              otPlatDnssdRegisterCallback aCallback);
+
+    /**
+     * Unregisters a service on the infrastructure network's DNS-SD module (on host).
+     *
+     * @param[in] aService      Information about the service to unregister.
+     * @param[in] aRequestId    The ID associated with this request.
+     * @param[in] aCallback     The callback function pointer to report the outcome (may be NULL if no callback needed).
+     */
+    void DnssdUnregisterService(const otPlatDnssdService   *aService,
+                                otPlatDnssdRequestId        aRequestId,
+                                otPlatDnssdRegisterCallback aCallback);
+
+    /**
+     * Registers or updates a key record on the infrastructure network's DNS-SD module (on host).
+     *
+     * @param[in] aKey          Information about the key record to register.
+     * @param[in] aRequestId    The ID associated with this request.
+     * @param[in] aCallback     The callback function pointer to report the outcome (may be NULL if no callback needed).
+     */
+    void DnssdRegisterKey(const otPlatDnssdKey       *aKey,
+                          otPlatDnssdRequestId        aRequestId,
+                          otPlatDnssdRegisterCallback aCallback);
+
+    /**
+     * Unregisters a key record on the infrastructure network's DNS-SD module (on host).
+     *
+     * @param[in] aKey          Information about the key record to register.
+     * @param[in] aRequestId    The ID associated with this request.
+     * @param[in] aCallback     The callback function pointer to report the outcome (may be NULL if no callback needed).
+     */
+    void DnssdUnregisterKey(const otPlatDnssdKey       *aKey,
+                            otPlatDnssdRequestId        aRequestId,
+                            otPlatDnssdRegisterCallback aCallback);
+
+    /**
+     * Gets the Dnssd state.
+     *
+     * Returns the platform dnssd state.
+     */
+    otPlatDnssdState DnssdGetState(void);
+#endif
+
 protected:
+    static constexpr uint8_t kBitsPerByte = 8; ///< Number of bits in a byte.
+
     typedef otError (NcpBase::*PropertyHandler)(void);
 
     /**
-     * This enumeration represents the `ResponseEntry` type.
-     *
+     * Represents the `ResponseEntry` type.
      */
     enum ResponseType
     {
@@ -195,11 +337,11 @@ protected:
     };
 
     /**
-     * This struct represents a spinel response entry.
-     *
+     * Represents a spinel response entry.
      */
     struct ResponseEntry
     {
+        uint8_t      mIid : 2;              ///< Spinel interface id.
         uint8_t      mTid : 4;              ///< Spinel transaction id.
         bool         mIsInUse : 1;          ///< `true` if this entry is in use, `false` otherwise.
         ResponseType mType : 2;             ///< Response type.
@@ -237,7 +379,7 @@ protected:
     otError WritePropertyValueInsertedRemovedFrame(uint8_t           aHeader,
                                                    unsigned int      aResponseCommand,
                                                    spinel_prop_key_t aPropKey,
-                                                   const uint8_t *   aValuePtr,
+                                                   const uint8_t    *aValuePtr,
                                                    uint16_t          aValueLen);
 
     otError SendQueuedResponses(void);
@@ -262,10 +404,10 @@ protected:
     static void UpdateChangedProps(Tasklet &aTasklet);
     void        UpdateChangedProps(void);
 
-    static void HandleFrameRemovedFromNcpBuffer(void *                   aContext,
+    static void HandleFrameRemovedFromNcpBuffer(void                    *aContext,
                                                 Spinel::Buffer::FrameTag aFrameTag,
                                                 Spinel::Buffer::Priority aPriority,
-                                                Spinel::Buffer *         aNcpBuffer);
+                                                Spinel::Buffer          *aNcpBuffer);
     void        HandleFrameRemovedFromNcpBuffer(Spinel::Buffer::FrameTag aFrameTag);
 
     otError EncodeChannelMask(uint32_t aChannelMask);
@@ -274,17 +416,26 @@ protected:
 #if OPENTHREAD_RADIO || OPENTHREAD_CONFIG_LINK_RAW_ENABLE
     otError PackRadioFrame(otRadioFrame *aFrame, otError aError);
 
-    static void LinkRawReceiveDone(otInstance *aInstance, otRadioFrame *aFrame, otError aError);
-    void        LinkRawReceiveDone(otRadioFrame *aFrame, otError aError);
+#if OPENTHREAD_CONFIG_MULTIPAN_RCP_ENABLE
+    void NotifySwitchoverDone(bool aSuccess);
+#endif
 
-    static void LinkRawTransmitDone(otInstance *  aInstance,
+    static void LinkRawReceiveDone(otInstance *aInstance, otRadioFrame *aFrame, otError aError);
+    void        LinkRawReceiveDone(uint8_t aIid, otRadioFrame *aFrame, otError aError);
+
+    static void LinkRawTransmitDone(otInstance   *aInstance,
                                     otRadioFrame *aFrame,
                                     otRadioFrame *aAckFrame,
                                     otError       aError);
-    void        LinkRawTransmitDone(otRadioFrame *aFrame, otRadioFrame *aAckFrame, otError aError);
+    void        LinkRawTransmitDone(uint8_t aIid, otRadioFrame *aFrame, otRadioFrame *aAckFrame, otError aError);
 
     static void LinkRawEnergyScanDone(otInstance *aInstance, int8_t aEnergyScanMaxRssi);
-    void        LinkRawEnergyScanDone(int8_t aEnergyScanMaxRssi);
+    void        LinkRawEnergyScanDone(uint8_t aIid, int8_t aEnergyScanMaxRssi);
+
+    static inline uint8_t GetNcpBaseIid(otInstance *aInstance)
+    {
+        return sNcpInstance->InstanceToIid(static_cast<Instance *>(aInstance));
+    }
 
 #endif // OPENTHREAD_RADIO || OPENTHREAD_CONFIG_LINK_RAW_ENABLE
 
@@ -302,8 +453,10 @@ protected:
     static void HandleNeighborTableChanged(otNeighborTableEvent aEvent, const otNeighborTableEntryInfo *aEntry);
     void        HandleNeighborTableChanged(otNeighborTableEvent aEvent, const otNeighborTableEntryInfo &aEntry);
 
+#if OPENTHREAD_CONFIG_MLE_PARENT_RESPONSE_CALLBACK_API_ENABLE
     static void HandleParentResponseInfo(otThreadParentResponseInfo *aInfo, void *aContext);
     void        HandleParentResponseInfo(const otThreadParentResponseInfo &aInfo);
+#endif
 #endif
 
     static void HandleDatagramFromStack(otMessage *aMessage, void *aContext);
@@ -325,7 +478,7 @@ protected:
     static void HandleCommissionerEnergyReport_Jump(uint32_t       aChannelMask,
                                                     const uint8_t *aEnergyData,
                                                     uint8_t        aLength,
-                                                    void *         aContext);
+                                                    void          *aContext);
     void        HandleCommissionerEnergyReport(uint32_t aChannelMask, const uint8_t *aEnergyData, uint8_t aLength);
 
     static void HandleCommissionerPanIdConflict_Jump(uint16_t aPanId, uint32_t aChannelMask, void *aContext);
@@ -338,30 +491,32 @@ protected:
 #endif
 
 #if OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE
-    static void HandleLinkMetricsReport_Jump(const otIp6Address *       aSource,
+    static void HandleLinkMetricsReport_Jump(const otIp6Address        *aSource,
                                              const otLinkMetricsValues *aMetricsValues,
-                                             uint8_t                    aStatus,
-                                             void *                     aContext);
+                                             otLinkMetricsStatus        aStatus,
+                                             void                      *aContext);
 
-    void HandleLinkMetricsReport(const otIp6Address *       aSource,
+    void HandleLinkMetricsReport(const otIp6Address        *aSource,
                                  const otLinkMetricsValues *aMetricsValues,
-                                 uint8_t                    aStatus);
+                                 otLinkMetricsStatus        aStatus);
 
-    static void HandleLinkMetricsMgmtResponse_Jump(const otIp6Address *aSource, uint8_t aStatus, void *aContext);
+    static void HandleLinkMetricsMgmtResponse_Jump(const otIp6Address *aSource,
+                                                   otLinkMetricsStatus aStatus,
+                                                   void               *aContext);
 
-    void HandleLinkMetricsMgmtResponse(const otIp6Address *aSource, uint8_t aStatus);
+    void HandleLinkMetricsMgmtResponse(const otIp6Address *aSource, otLinkMetricsStatus aStatus);
 
     static void HandleLinkMetricsEnhAckProbingIeReport_Jump(otShortAddress             aShortAddress,
-                                                            const otExtAddress *       aExtAddress,
+                                                            const otExtAddress        *aExtAddress,
                                                             const otLinkMetricsValues *aMetricsValues,
-                                                            void *                     aContext);
+                                                            void                      *aContext);
 
     void HandleLinkMetricsEnhAckProbingIeReport(otShortAddress             aShortAddress,
-                                                const otExtAddress *       aExtAddress,
+                                                const otExtAddress        *aExtAddress,
                                                 const otLinkMetricsValues *aMetricsValues);
 #endif
 
-    static void HandleMlrRegResult_Jump(void *              aContext,
+    static void HandleMlrRegResult_Jump(void               *aContext,
                                         otError             aError,
                                         uint8_t             aMlrStatus,
                                         const otIp6Address *aFailedAddresses,
@@ -374,9 +529,9 @@ protected:
     otError EncodeOperationalDataset(const otOperationalDataset &aDataset);
 
     otError DecodeOperationalDataset(otOperationalDataset &aDataset,
-                                     const uint8_t **      aTlvs             = nullptr,
-                                     uint8_t *             aTlvsLength       = nullptr,
-                                     const otIp6Address ** aDestIpAddress    = nullptr,
+                                     const uint8_t       **aTlvs             = nullptr,
+                                     uint8_t              *aTlvsLength       = nullptr,
+                                     const otIp6Address  **aDestIpAddress    = nullptr,
                                      bool                  aAllowEmptyValues = false);
 
     otError EncodeNeighborInfo(const otNeighborInfo &aNeighborInfo);
@@ -393,11 +548,11 @@ protected:
 #endif
 
 #if OPENTHREAD_CONFIG_UDP_FORWARD_ENABLE
-    static void HandleUdpForwardStream(otMessage *   aMessage,
+    static void HandleUdpForwardStream(otMessage    *aMessage,
                                        uint16_t      aPeerPort,
                                        otIp6Address *aPeerAddr,
                                        uint16_t      aSockPort,
-                                       void *        aContext);
+                                       void         *aContext);
     void HandleUdpForwardStream(otMessage *aMessage, uint16_t aPeerPort, otIp6Address &aPeerAddr, uint16_t aPort);
 #endif // OPENTHREAD_CONFIG_UDP_FORWARD_ENABLE
 #endif // OPENTHREAD_MTD || OPENTHREAD_FTD
@@ -485,32 +640,28 @@ protected:
 
     void ResetCounters(void);
 
-#if OPENTHREAD_CONFIG_LEGACY_ENABLE
-    void StartLegacy(void);
-    void StopLegacy(void);
-#else
-    void StartLegacy(void) {}
-    void StopLegacy(void) {}
-#endif
-
     static uint8_t      ConvertLogLevel(otLogLevel aLogLevel);
     static unsigned int ConvertLogRegion(otLogRegion aLogRegion);
 
+#if OPENTHREAD_CONFIG_DIAG_ENABLE
+    static void HandleDiagOutput_Jump(const char *aFormat, va_list aArguments, void *aContext);
+    void        HandleDiagOutput(const char *aFormat, va_list aArguments);
+#endif
+
 #if OPENTHREAD_ENABLE_NCP_VENDOR_HOOK
     /**
-     * This method defines a vendor "command handler" hook to process vendor-specific spinel commands.
+     * Defines a vendor "command handler" hook to process vendor-specific spinel commands.
      *
      * @param[in] aHeader   The spinel frame header.
      * @param[in] aCommand  The spinel command key.
      *
      * @retval OT_ERROR_NONE     The response is prepared.
      * @retval OT_ERROR_NO_BUFS  Out of buffer while preparing the response.
-     *
      */
     otError VendorCommandHandler(uint8_t aHeader, unsigned int aCommand);
 
     /**
-     * This method is a callback which mirrors `NcpBase::HandleFrameRemovedFromNcpBuffer()`. It is called when a
+     * Is a callback which mirrors `NcpBase::HandleFrameRemovedFromNcpBuffer()`. It is called when a
      * spinel frame is sent and removed from NCP buffer.
      *
      * (a) This can be used to track and verify that a vendor spinel frame response is delivered to the host (tracking
@@ -520,12 +671,11 @@ protected:
      *     implement mechanisms to re-send a failed/pending response or an async spinel frame.
      *
      * @param[in] aFrameTag    The tag of the frame removed from NCP buffer.
-     *
      */
     void VendorHandleFrameRemovedFromNcpBuffer(Spinel::Buffer::FrameTag aFrameTag);
 
     /**
-     * This method defines a vendor "get property handler" hook to process vendor spinel properties.
+     * Defines a vendor "get property handler" hook to process vendor spinel properties.
      *
      * The vendor handler should return `OT_ERROR_NOT_FOUND` status if it does not support "get" operation for the
      * given property key. Otherwise, the vendor handler should behave like other property get handlers, i.e., it
@@ -537,12 +687,11 @@ protected:
      * @retval OT_ERROR_NONE          Successfully retrieved the property value and prepared the response.
      * @retval OT_ERROR_NOT_FOUND     Does not support the given property key.
      * @retval OT_ERROR_NO_BUFS       Out of buffer while preparing the response.
-     *
      */
     otError VendorGetPropertyHandler(spinel_prop_key_t aPropKey);
 
     /**
-     * This method defines a vendor "set property handler" hook to process vendor spinel properties.
+     * Defines a vendor "set property handler" hook to process vendor spinel properties.
      *
      * The vendor handler should return `OT_ERROR_NOT_FOUND` status if it does not support "set" operation for the
      * given property key. Otherwise, the vendor handler should behave like other property set handlers, i.e., it
@@ -556,21 +705,23 @@ protected:
      *
      * @returns OT_ERROR_NOT_FOUND if it does not support the given property key, otherwise the error in either parsing
      *          of the input or the "set" operation.
-     *
      */
     otError VendorSetPropertyHandler(spinel_prop_key_t aPropKey);
 
 #endif // OPENTHREAD_ENABLE_NCP_VENDOR_HOOK
 
+    static void ThreadDetachGracefullyHandler(void *aContext);
+
+    void ThreadDetachGracefullyHandler(void);
+
+    static void DatasetSendMgmtPendingSetHandler(otError aResult, void *aContext);
+
+    void DatasetSendMgmtPendingSetHandler(otError aResult);
+
 protected:
-    static NcpBase *       sNcpInstance;
+    static NcpBase        *sNcpInstance;
     static spinel_status_t ThreadErrorToSpinelStatus(otError aError);
     static uint8_t         LinkFlagsToFlagByte(bool aRxOnWhenIdle, bool aDeviceType, bool aNetworkData);
-    Instance *             mInstance;
-    Spinel::Buffer         mTxFrameBuffer;
-    Spinel::Encoder        mEncoder;
-    Spinel::Decoder        mDecoder;
-    bool                   mHostPowerStateInProgress;
 
     enum
     {
@@ -578,6 +729,15 @@ protected:
         kResponseQueueSize  = OPENTHREAD_CONFIG_NCP_SPINEL_RESPONSE_QUEUE_SIZE,
         kInvalidScanChannel = -1, // Invalid scan channel.
     };
+
+    Instance *mInstance;
+#if OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE && OPENTHREAD_RADIO
+    Instance *mInstances[kSpinelInterfaceCount];
+#endif
+    Spinel::Buffer  mTxFrameBuffer;
+    Spinel::Encoder mEncoder;
+    Spinel::Decoder mDecoder;
+    bool            mHostPowerStateInProgress;
 
     spinel_status_t mLastStatus;
     uint32_t        mScanChannelMask;
@@ -601,7 +761,7 @@ protected:
 
     uint8_t mTxBuffer[kTxBufferSize];
 
-    spinel_tid_t mNextExpectedTid;
+    spinel_tid_t mNextExpectedTid[kSpinelInterfaceCount];
 
     uint8_t       mResponseQueueHead;
     uint8_t       mResponseQueueTail;
@@ -609,7 +769,7 @@ protected:
 
     bool mAllowLocalNetworkDataChange;
     bool mRequireJoinExistingNetwork;
-    bool mIsRawStreamEnabled;
+    bool mIsRawStreamEnabled[kSpinelInterfaceCount];
     bool mPcapEnabled;
     bool mDisableStreamWrite;
     bool mShouldEmitChildTableUpdate;
@@ -623,11 +783,12 @@ protected:
 #endif
     uint8_t mPreferredRouteId;
 #endif
+    uint8_t mCurCommandIid;
 
 #if OPENTHREAD_RADIO || OPENTHREAD_CONFIG_LINK_RAW_ENABLE
-    uint8_t mCurTransmitTID;
-    int8_t  mCurScanChannel;
-    bool    mSrcMatchEnabled;
+    uint8_t mCurTransmitTID[kSpinelInterfaceCount];
+    int8_t  mCurScanChannel[kSpinelInterfaceCount];
+    bool    mSrcMatchEnabled[kSpinelInterfaceCount];
 #endif // OPENTHREAD_RADIO || OPENTHREAD_CONFIG_LINK_RAW_ENABLE
 
 #if OPENTHREAD_MTD || OPENTHREAD_FTD
@@ -641,33 +802,24 @@ protected:
     uint32_t mDroppedInboundIpFrameCounter;   // Number of dropped inbound data/IP frames.
 
 #if OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE
-    enum : uint8_t
-    {
-        kSrpClientMaxHostAddresses = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_MAX_HOST_ADDRESSES,
-    };
+    static constexpr uint8_t kSrpClientMaxHostAddresses = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_MAX_HOST_ADDRESSES;
 
     otError EncodeSrpClientHostInfo(const otSrpClientHostInfo &aHostInfo);
     otError EncodeSrpClientServices(const otSrpClientService *aServices);
 
     static void HandleSrpClientCallback(otError                    aError,
                                         const otSrpClientHostInfo *aHostInfo,
-                                        const otSrpClientService * aServices,
-                                        const otSrpClientService * aRemovedServices,
-                                        void *                     aContext);
+                                        const otSrpClientService  *aServices,
+                                        const otSrpClientService  *aRemovedServices,
+                                        void                      *aContext);
     void        HandleSrpClientCallback(otError                    aError,
                                         const otSrpClientHostInfo *aHostInfo,
-                                        const otSrpClientService * aServices,
-                                        const otSrpClientService * aRemovedServices);
+                                        const otSrpClientService  *aServices,
+                                        const otSrpClientService  *aRemovedServices);
 
     bool mSrpClientCallbackEnabled;
 #endif // OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE
 
-#if OPENTHREAD_CONFIG_LEGACY_ENABLE
-    const otNcpLegacyHandlers *mLegacyHandlers;
-    uint8_t                    mLegacyUlaPrefix[OT_NCP_LEGACY_ULA_PREFIX_LENGTH];
-    otExtAddress               mLegacyLastJoinedNode;
-    bool                       mLegacyNodeDidJoin;
-#endif
 #endif // OPENTHREAD_MTD || OPENTHREAD_FTD
 
     uint32_t mFramingErrorCounter;          // Number of improperly formed received spinel frames.
@@ -677,7 +829,55 @@ protected:
 
     bool mDidInitialUpdates;
 
+    spinel_status_t mDatasetSendMgmtPendingSetResult;
+
     uint64_t mLogTimestampBase; // Timestamp base used for logging
+
+#if OPENTHREAD_FTD
+#if OPENTHREAD_CONFIG_NCP_INFRA_IF_ENABLE && OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+    otError InfraIfAddAddress(const otIp6Address &aAddress);
+    bool    InfraIfContainsAddress(const otIp6Address &aAddress);
+
+    static constexpr uint8_t kMaxInfraIfAddrs = 10;
+    otIp6Address             mInfraIfAddrs[kMaxInfraIfAddrs];
+    uint8_t                  mInfraIfAddrCount;
+    uint32_t                 mInfraIfIndex;
+#endif
+
+#if OPENTHREAD_CONFIG_NCP_DNSSD_ENABLE && OPENTHREAD_CONFIG_PLATFORM_DNSSD_ENABLE
+
+    template <typename DnssdObjType>
+    void DnssdUpdate(const DnssdObjType         *aObj,
+                     otPlatDnssdRequestId        aRequestId,
+                     otPlatDnssdRegisterCallback aCallback,
+                     bool                        aRegister)
+    {
+        otError          error  = OT_ERROR_NONE;
+        uint8_t          header = SPINEL_HEADER_FLAG | SPINEL_HEADER_TX_NOTIFICATION_IID;
+        spinel_command_t cmd    = aRegister ? SPINEL_CMD_PROP_VALUE_INSERTED : SPINEL_CMD_PROP_VALUE_REMOVED;
+
+        VerifyOrExit(aObj != nullptr, error = OT_ERROR_INVALID_ARGS);
+        VerifyOrExit(mDnssdState == OT_PLAT_DNSSD_READY, error = OT_ERROR_INVALID_STATE);
+
+        SuccessOrExit(error = mEncoder.BeginFrame(header, cmd));
+        SuccessOrExit(error = Spinel::EncodeDnssd(mEncoder, *aObj, aRequestId, aCallback));
+        SuccessOrExit(error = mEncoder.EndFrame());
+
+    exit:
+        if (error != OT_ERROR_NONE)
+        {
+            aCallback(mInstance, aRequestId, error);
+        }
+    }
+
+    otPlatDnssdState mDnssdState;
+#endif // OPENTHREAD_CONFIG_NCP_DNSSD_ENABLE && OPENTHREAD_CONFIG_PLATFORM_DNSSD_ENABLE
+#endif // OPENTHREAD_FTD
+
+#if OPENTHREAD_CONFIG_DIAG_ENABLE
+    char    *mDiagOutput;
+    uint16_t mDiagOutputLen;
+#endif
 };
 
 } // namespace Ncp

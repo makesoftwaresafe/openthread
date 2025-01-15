@@ -62,14 +62,23 @@ template <> otError Joiner::Process<Cmd("discerner")>(Arg aArgs[])
 
         VerifyOrExit(discerner != nullptr, error = OT_ERROR_NOT_FOUND);
 
-        OutputLine("0x%llx/%u", static_cast<unsigned long long>(discerner->mValue), discerner->mLength);
+        if (discerner->mValue <= 0xffffffff)
+        {
+            OutputLine("0x%lx/%u", static_cast<unsigned long>(discerner->mValue & 0xffffffff), discerner->mLength);
+        }
+        else
+        {
+            OutputLine("0x%lx%08lx/%u", static_cast<unsigned long>(discerner->mValue >> 32),
+                       static_cast<unsigned long>(discerner->mValue & 0xffffffff), discerner->mLength);
+        }
+
         error = OT_ERROR_NONE;
     }
     else
     {
         otJoinerDiscerner discerner;
 
-        memset(&discerner, 0, sizeof(discerner));
+        ClearAllBytes(discerner);
 
         /**
          * @cli joiner discerner clear
@@ -99,7 +108,7 @@ template <> otError Joiner::Process<Cmd("discerner")>(Arg aArgs[])
         else
         {
             VerifyOrExit(aArgs[1].IsEmpty());
-            SuccessOrExit(Interpreter::ParseJoinerDiscerner(aArgs[0], discerner));
+            SuccessOrExit(ParseJoinerDiscerner(aArgs[0], discerner));
             error = otJoinerSetDiscerner(GetInstancePtr(), &discerner);
         }
     }
@@ -252,10 +261,7 @@ exit:
     return error;
 }
 
-void Joiner::HandleCallback(otError aError, void *aContext)
-{
-    static_cast<Joiner *>(aContext)->HandleCallback(aError);
-}
+void Joiner::HandleCallback(otError aError, void *aContext) { static_cast<Joiner *>(aContext)->HandleCallback(aError); }
 
 void Joiner::HandleCallback(otError aError)
 {

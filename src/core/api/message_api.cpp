@@ -33,41 +33,44 @@
 
 #include "openthread-core-config.h"
 
-#include <openthread/message.h>
-
-#include "common/as_core_type.hpp"
-#include "common/locator_getters.hpp"
+#include "instance/instance.hpp"
 
 using namespace ot;
 
-void otMessageFree(otMessage *aMessage)
+void otMessageFree(otMessage *aMessage) { AsCoreType(aMessage).Free(); }
+
+uint16_t otMessageGetLength(const otMessage *aMessage) { return AsCoreType(aMessage).GetLength(); }
+
+otError otMessageSetLength(otMessage *aMessage, uint16_t aLength) { return AsCoreType(aMessage).SetLength(aLength); }
+
+uint16_t otMessageGetOffset(const otMessage *aMessage) { return AsCoreType(aMessage).GetOffset(); }
+
+void otMessageSetOffset(otMessage *aMessage, uint16_t aOffset) { AsCoreType(aMessage).SetOffset(aOffset); }
+
+bool otMessageIsLinkSecurityEnabled(const otMessage *aMessage) { return AsCoreType(aMessage).IsLinkSecurityEnabled(); }
+
+bool otMessageIsLoopbackToHostAllowed(const otMessage *aMessage)
 {
-    AsCoreType(aMessage).Free();
+    return AsCoreType(aMessage).IsLoopbackToHostAllowed();
 }
 
-uint16_t otMessageGetLength(const otMessage *aMessage)
+void otMessageSetLoopbackToHostAllowed(otMessage *aMessage, bool aAllowLoopbackToHost)
 {
-    return AsCoreType(aMessage).GetLength();
+    return AsCoreType(aMessage).SetLoopbackToHostAllowed(aAllowLoopbackToHost);
 }
 
-otError otMessageSetLength(otMessage *aMessage, uint16_t aLength)
+bool otMessageIsMulticastLoopEnabled(otMessage *aMessage) { return AsCoreType(aMessage).GetMulticastLoop(); }
+
+void otMessageSetMulticastLoopEnabled(otMessage *aMessage, bool aEnabled)
 {
-    return AsCoreType(aMessage).SetLength(aLength);
+    AsCoreType(aMessage).SetMulticastLoop(aEnabled);
 }
 
-uint16_t otMessageGetOffset(const otMessage *aMessage)
-{
-    return AsCoreType(aMessage).GetOffset();
-}
+otMessageOrigin otMessageGetOrigin(const otMessage *aMessage) { return MapEnum(AsCoreType(aMessage).GetOrigin()); }
 
-void otMessageSetOffset(otMessage *aMessage, uint16_t aOffset)
+void otMessageSetOrigin(otMessage *aMessage, otMessageOrigin aOrigin)
 {
-    AsCoreType(aMessage).SetOffset(aOffset);
-}
-
-bool otMessageIsLinkSecurityEnabled(const otMessage *aMessage)
-{
-    return AsCoreType(aMessage).IsLinkSecurityEnabled();
+    AsCoreType(aMessage).SetOrigin(MapEnum(aOrigin));
 }
 
 void otMessageSetDirectTransmission(otMessage *aMessage, bool aEnabled)
@@ -82,23 +85,31 @@ void otMessageSetDirectTransmission(otMessage *aMessage, bool aEnabled)
     }
 }
 
-int8_t otMessageGetRss(const otMessage *aMessage)
+int8_t otMessageGetRss(const otMessage *aMessage) { return AsCoreType(aMessage).GetAverageRss(); }
+
+otError otMessageGetThreadLinkInfo(const otMessage *aMessage, otThreadLinkInfo *aLinkInfo)
 {
-    return AsCoreType(aMessage).GetAverageRss();
+    return AsCoreType(aMessage).GetLinkInfo(AsCoreType(aLinkInfo));
 }
 
 otError otMessageAppend(otMessage *aMessage, const void *aBuf, uint16_t aLength)
 {
+    AssertPointerIsNotNull(aBuf);
+
     return AsCoreType(aMessage).AppendBytes(aBuf, aLength);
 }
 
 uint16_t otMessageRead(const otMessage *aMessage, uint16_t aOffset, void *aBuf, uint16_t aLength)
 {
+    AssertPointerIsNotNull(aBuf);
+
     return AsCoreType(aMessage).ReadBytes(aOffset, aBuf, aLength);
 }
 
 int otMessageWrite(otMessage *aMessage, uint16_t aOffset, const void *aBuf, uint16_t aLength)
 {
+    AssertPointerIsNotNull(aBuf);
+
     AsCoreType(aMessage).WriteBytes(aOffset, aBuf, aLength);
 
     return aLength;
@@ -106,6 +117,8 @@ int otMessageWrite(otMessage *aMessage, uint16_t aOffset, const void *aBuf, uint
 
 void otMessageQueueInit(otMessageQueue *aQueue)
 {
+    AssertPointerIsNotNull(aQueue);
+
     aQueue->mData = nullptr;
 }
 
@@ -124,10 +137,7 @@ void otMessageQueueDequeue(otMessageQueue *aQueue, otMessage *aMessage)
     AsCoreType(aQueue).Dequeue(AsCoreType(aMessage));
 }
 
-otMessage *otMessageQueueGetHead(otMessageQueue *aQueue)
-{
-    return AsCoreType(aQueue).GetHead();
-}
+otMessage *otMessageQueueGetHead(otMessageQueue *aQueue) { return AsCoreType(aQueue).GetHead(); }
 
 otMessage *otMessageQueueGetNext(otMessageQueue *aQueue, const otMessage *aMessage)
 {
@@ -147,4 +157,6 @@ void otMessageGetBufferInfo(otInstance *aInstance, otBufferInfo *aBufferInfo)
 {
     AsCoreType(aInstance).GetBufferInfo(AsCoreType(aBufferInfo));
 }
+
+void otMessageResetBufferInfo(otInstance *aInstance) { AsCoreType(aInstance).ResetBufferInfo(); }
 #endif // OPENTHREAD_MTD || OPENTHREAD_FTD

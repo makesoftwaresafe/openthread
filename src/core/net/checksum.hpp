@@ -47,8 +47,7 @@
 namespace ot {
 
 /**
- * This class implements IP checksum calculation and verification.
- *
+ * Implements IP checksum calculation and verification.
  */
 class Checksum
 {
@@ -56,7 +55,7 @@ class Checksum
 
 public:
     /**
-     * This static method verifies the checksum in a given message (if UDP/ICMP6).
+     * Verifies the checksum in a given message (if UDP/ICMP6).
      *
      * @param[in] aMessage       The message to verify its checksum. The `aMessage.GetOffset()` should point to start
      *                           UDP/ICMP6 header.
@@ -65,12 +64,11 @@ public:
      *
      * @retval kErrorNone    The checksum is valid if UDP/ICMP6 protocol, or not a UDP/ICMP6 protocol.
      * @retval kErrorDrop    The check is not valid and message should be dropped.
-     *
      */
     static Error VerifyMessageChecksum(const Message &aMessage, const Ip6::MessageInfo &aMessageInfo, uint8_t aIpProto);
 
     /**
-     * This static method calculates and then updates the checksum in a given message (if TCP/UDP/ICMPv6).
+     * Calculates and then updates the checksum in a given message (if TCP/UDP/ICMPv6).
      *
      * @param[in,out] aMessage  The message to update the checksum in. The `aMessage.GetOffset()` should point to start
      *                          of the TCP/UDP/ICMPv6 header. On exit the checksum field in TCP/UDP/ICMPv6 header in the
@@ -78,15 +76,14 @@ public:
      * @param[in] aSource       The source address.
      * @param[in] aDestination  The destination address.
      * @param[in] aIpProto      The Internet Protocol value.
-     *
      */
-    static void UpdateMessageChecksum(Message &           aMessage,
+    static void UpdateMessageChecksum(Message            &aMessage,
                                       const Ip6::Address &aSource,
                                       const Ip6::Address &aDestination,
                                       uint8_t             aIpProto);
 
     /**
-     * This static method calculates and then updates the checksum in a given IPv4 message (if TCP/UDP/ICMP(v4)).
+     * Calculates and then updates the checksum in a given IPv4 message (if TCP/UDP/ICMP(v4)).
      *
      * @param[in,out] aMessage  The message to update the checksum in. The `aMessage.GetOffset()` should point to start
      *                          of the TCP/UDP/ICMP(v4) header. On exit the checksum field in TCP/UDP/ICMP(v4) header in
@@ -94,18 +91,16 @@ public:
      * @param[in] aSource       The source address.
      * @param[in] aDestination  The destination address.
      * @param[in] aIpProto      The Internet Protocol value.
-     *
      */
-    static void UpdateMessageChecksum(Message &           aMessage,
+    static void UpdateMessageChecksum(Message            &aMessage,
                                       const Ip4::Address &aSource,
                                       const Ip4::Address &aDestination,
                                       uint8_t             aIpProto);
 
     /**
-     * This static method calculates and then updates the checksum field in the IPv4 header.
+     * Calculates and then updates the checksum field in the IPv4 header.
      *
      * @param[in,out] aHeader The IPv4 header to update the checksum in.
-     *
      */
     static void UpdateIp4HeaderChecksum(Ip4::Header &aHeader);
 
@@ -124,11 +119,11 @@ private:
     void     Calculate(const Ip6::Address &aSource,
                        const Ip6::Address &aDestination,
                        uint8_t             aIpProto,
-                       const Message &     aMessage);
+                       const Message      &aMessage);
     void     Calculate(const Ip4::Address &aSource,
                        const Ip4::Address &aDestination,
                        uint8_t             aIpProto,
-                       const Message &     aMessage);
+                       const Message      &aMessage);
 
     static constexpr uint16_t kValidRxChecksum = 0xffff;
 

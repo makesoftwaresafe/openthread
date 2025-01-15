@@ -30,6 +30,8 @@ add_library(openthread-ftd)
 
 target_compile_definitions(openthread-ftd PRIVATE
     OPENTHREAD_FTD=1
+    OPENTHREAD_MTD=0
+    OPENTHREAD_RADIO=0
 )
 
 target_compile_options(openthread-ftd PRIVATE
@@ -43,9 +45,8 @@ target_sources(openthread-ftd PRIVATE ${COMMON_SOURCES})
 target_link_libraries(openthread-ftd
     PRIVATE
         ${OT_MBEDTLS}
+        ot-config-ftd
         ot-config
 )
 
-if(NOT OT_EXCLUDE_TCPLP_LIB)
-    target_link_libraries(openthread-ftd PRIVATE tcplp)
-endif()
+target_link_libraries(openthread-ftd PRIVATE tcplp-ftd)

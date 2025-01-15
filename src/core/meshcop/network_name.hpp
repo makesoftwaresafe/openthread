@@ -29,7 +29,6 @@
 /**
  * @file
  *   This file includes definitions for managing the Network Name.
- *
  */
 
 #ifndef MESHCOP_NETWORK_NAME_HPP_
@@ -50,10 +49,9 @@ namespace ot {
 namespace MeshCoP {
 
 /**
- * This class represents a name string as data (pointer to a char buffer along with a length).
+ * Represents a name string as data (pointer to a char buffer along with a length).
  *
  * @note The char array does NOT need to be null terminated.
- *
  */
 class NameData : private Data<kWithUint8Length>
 {
@@ -61,32 +59,29 @@ class NameData : private Data<kWithUint8Length>
 
 public:
     /**
-     * This constructor initializes the NameData object.
+     * Initializes the NameData object.
      *
      * @param[in] aBuffer   A pointer to a `char` buffer (does not need to be null terminated).
      * @param[in] aLength   The length (number of chars) in the buffer.
-     *
      */
     NameData(const char *aBuffer, uint8_t aLength) { Init(aBuffer, aLength); }
 
     /**
-     * This method returns the pointer to char buffer (not necessarily null terminated).
+     * Returns the pointer to char buffer (not necessarily null terminated).
      *
      * @returns The pointer to the char buffer.
-     *
      */
     const char *GetBuffer(void) const { return reinterpret_cast<const char *>(GetBytes()); }
 
     /**
-     * This method returns the length (number of chars in buffer).
+     * Returns the length (number of chars in buffer).
      *
      * @returns The name length.
-     *
      */
     uint8_t GetLength(void) const { return Data<kWithUint8Length>::GetLength(); }
 
     /**
-     * This method copies the name data into a given char buffer with a given size.
+     * Copies the name data into a given char buffer with a given size.
      *
      * The given buffer is cleared (`memset` to zero) before copying the name into it. The copied string
      * in @p aBuffer is NOT necessarily null terminated.
@@ -95,50 +90,47 @@ public:
      * @param[in]  aMaxSize  Size of @p aBuffer (maximum number of chars to write into @p aBuffer).
      *
      * @returns The actual number of chars copied into @p aBuffer.
-     *
      */
     uint8_t CopyTo(char *aBuffer, uint8_t aMaxSize) const;
 };
 
 /**
- * This structure represents an Network Name.
- *
+ * Represents an Network Name.
  */
 class NetworkName : public otNetworkName, public Unequatable<NetworkName>
 {
 public:
+    static constexpr const char *kNetworkNameInit = "OpenThread";
+    static constexpr const char *kDomainNameInit  = "DefaultDomain"; // Section 5.22 Thread spec, MUST NOT change.
+
     /**
      * This constant specified the maximum number of chars in Network Name (excludes null char).
-     *
      */
     static constexpr uint8_t kMaxSize = OT_NETWORK_NAME_MAX_SIZE;
 
     /**
-     * This constructor initializes the Network Name as an empty string.
-     *
+     * Initializes the Network Name as an empty string.
      */
     NetworkName(void) { m8[0] = '\0'; }
 
     /**
-     * This method gets the Network Name as a null terminated C string.
+     * Gets the Network Name as a null terminated C string.
      *
      * @returns The Network Name as a null terminated C string array.
-     *
      */
     const char *GetAsCString(void) const { return m8; }
 
     /**
-     * This method gets the Network Name as NameData.
+     * Gets the Network Name as NameData.
      *
      * @returns The Network Name as NameData.
-     *
      */
     NameData GetAsData(void) const;
 
     /**
-     * This method sets the Network Name from a given null terminated C string.
+     * Sets the Network Name from a given null terminated C string.
      *
-     * This method also validates that the given @p aNameString follows UTF-8 encoding and can fit in `kMaxSize`
+     * Also validates that the given @p aNameString follows UTF-8 encoding and can fit in `kMaxSize`
      * chars.
      *
      * @param[in] aNameString      A name C string.
@@ -146,45 +138,40 @@ public:
      * @retval kErrorNone          Successfully set the Network Name.
      * @retval kErrorAlready       The name is already set to the same string.
      * @retval kErrorInvalidArgs   Given name is invalid (too long or does not follow UTF-8 encoding).
-     *
      */
     Error Set(const char *aNameString);
 
     /**
-     * This method sets the Network Name.
+     * Sets the Network Name.
      *
      * @param[in]  aNameData           A reference to name data.
      *
      * @retval kErrorNone          Successfully set the Network Name.
      * @retval kErrorAlready       The name is already set to the same string.
      * @retval kErrorInvalidArgs   Given name is too long.
-     *
      */
     Error Set(const NameData &aNameData);
 
     /**
-     * This method overloads operator `==` to evaluate whether or not two given `NetworkName` objects are equal.
+     * Overloads operator `==` to evaluate whether or not two given `NetworkName` objects are equal.
      *
      * @param[in]  aOther  The other `NetworkName` to compare with.
      *
      * @retval TRUE   If the two are equal.
      * @retval FALSE  If the two are not equal.
-     *
      */
     bool operator==(const NetworkName &aOther) const;
 };
 
 #if (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
 /**
- * This type represents a Thread Domain Name.
- *
+ * Represents a Thread Domain Name.
  */
 typedef NetworkName DomainName;
 #endif
 
 /**
- * This class manages the Network Name value.
- *
+ * Manages the Network Name value.
  */
 class NetworkNameManager : public InstanceLocator, private NonCopyable
 {
@@ -193,77 +180,75 @@ public:
      * Constructor.
      *
      * @param[in]  aInstance  A reference to the OpenThread instance.
-     *
      */
     explicit NetworkNameManager(Instance &aInstance);
 
     /**
-     * This method returns the Network Name.
+     * Returns the Network Name.
      *
      * @returns The Network Name.
-     *
      */
     const NetworkName &GetNetworkName(void) const { return mNetworkName; }
 
     /**
-     * This method sets the Network Name.
+     * Sets the Network Name.
      *
      * @param[in]  aNameString   A pointer to a string character array. Must be null terminated.
      *
      * @retval kErrorNone          Successfully set the Network Name.
      * @retval kErrorInvalidArgs   Given name is too long.
-     *
      */
     Error SetNetworkName(const char *aNameString);
 
     /**
-     * This method sets the Network Name.
+     * Sets the Network Name.
      *
      * @param[in]  aNameData     A name data (pointer to char buffer and length).
      *
      * @retval kErrorNone          Successfully set the Network Name.
      * @retval kErrorInvalidArgs   Given name is too long.
-     *
      */
     Error SetNetworkName(const NameData &aNameData);
 
 #if (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
     /**
-     * This method returns the Thread Domain Name.
+     * Returns the Thread Domain Name.
      *
      * @returns The Thread Domain Name.
-     *
      */
     const DomainName &GetDomainName(void) const { return mDomainName; }
 
     /**
-     * This method sets the Thread Domain Name.
+     * Sets the Thread Domain Name.
      *
      * @param[in]  aNameString   A pointer to a string character array. Must be null terminated.
      *
      * @retval kErrorNone          Successfully set the Thread Domain Name.
      * @retval kErrorInvalidArgs   Given name is too long.
-     *
      */
     Error SetDomainName(const char *aNameString);
 
     /**
-     * This method sets the Thread Domain Name.
+     * Sets the Thread Domain Name.
      *
      * @param[in]  aNameData     A name data (pointer to char buffer and length).
      *
      * @retval kErrorNone          Successfully set the Thread Domain Name.
      * @retval kErrorInvalidArgs   Given name is too long.
-     *
      */
     Error SetDomainName(const NameData &aNameData);
+
+    /**
+     * Checks whether the Thread Domain Name is currently set to the default name.
+     *
+     * @returns true if Thread Domain Name equals "DefaultDomain", false otherwise.
+     */
+    bool IsDefaultDomainNameSet(void) const;
+
 #endif // (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
 
 private:
     Error SignalNetworkNameChange(Error aError);
-
-    static const char sNetworkNameInit[];
-    static const char sDomainNameInit[];
 
     NetworkName mNetworkName;
 

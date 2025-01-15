@@ -49,12 +49,10 @@ namespace Crypto {
  * @addtogroup core-security
  *
  * @{
- *
  */
 
 /**
- * This class implements AES ECB computation.
- *
+ * Implements AES ECB computation.
  */
 class AesEcb
 {
@@ -62,31 +60,27 @@ public:
     static constexpr uint8_t kBlockSize = 16; ///< AES-128 block size (bytes).
 
     /**
-     * Constructor to initialize the mbedtls_aes_context.
-     *
+     * Constructor to initialize the AES operation.
      */
     AesEcb(void);
 
     /**
-     * Destructor to free the mbedtls_aes_context.
-     *
+     * Destructor to free the AES context.
      */
     ~AesEcb(void);
 
     /**
-     * This method sets the key.
+     * Sets the key.
      *
      * @param[in]  aKey     Crypto Key used for ECB operation
-     *
      */
     void SetKey(const Key &aKey);
 
     /**
-     * This method encrypts data.
+     * Encrypts data.
      *
      * @param[in]   aInput   A pointer to the input buffer.
      * @param[out]  aOutput  A pointer to the output buffer.
-     *
      */
     void Encrypt(const uint8_t aInput[kBlockSize], uint8_t aOutput[kBlockSize]);
 
@@ -97,7 +91,6 @@ private:
 
 /**
  * @}
- *
  */
 
 } // namespace Crypto

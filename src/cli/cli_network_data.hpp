@@ -38,27 +38,23 @@
 
 #include <openthread/netdata.h>
 
-#include "cli/cli_output.hpp"
+#include "cli/cli_utils.hpp"
 
 namespace ot {
 namespace Cli {
 
 /**
- * This class implements the Network Data CLI.
- *
+ * Implements the Network Data CLI.
  */
-class NetworkData : private OutputWrapper
+class NetworkData : private Utils
 {
 public:
-    typedef Utils::CmdLineParser::Arg Arg;
-
     /**
      * This constant specifies the string size for representing Network Data prefix/route entry flags.
      *
      * BorderRouter (OnMeshPrefix) TLV uses `uint16_t` for its flags and ExternalRoute uses `uint8_t`, though some of
      * the bits are not currently used and reserved for future, so 17 chars string (16 flags plus null char at end of
      * string) covers current and future flags.
-     *
      */
     static constexpr uint16_t kFlagsStringSize = 17;
 
@@ -67,66 +63,65 @@ public:
     /**
      * Constructor
      *
-     * @param[in]  aOutput The CLI console output context
-     *
+     * @param[in]  aInstance            The OpenThread Instance.
+     * @param[in]  aOutputImplementer   An `OutputImplementer`.
      */
-    explicit NetworkData(Output &aOutput)
-        : OutputWrapper(aOutput)
-    {
-    }
+    NetworkData(otInstance *aInstance, OutputImplementer &aOutputImplementer);
 
     /**
-     * This method interprets a list of CLI arguments.
+     * Processes a CLI sub-command.
      *
-     * @param[in]  aArgs        An array of command line arguments.
+     * @param[in]  aArgs     An array of command line arguments.
      *
+     * @retval OT_ERROR_NONE              Successfully executed the CLI command.
+     * @retval OT_ERROR_PENDING           The CLI command was successfully started but final result is pending.
+     * @retval OT_ERROR_INVALID_COMMAND   Invalid or unknown CLI command.
+     * @retval OT_ERROR_INVALID_ARGS      Invalid arguments.
+     * @retval ...                        Error during execution of the CLI command.
      */
     otError Process(Arg aArgs[]);
 
     /**
-     * This method outputs the prefix config.
+     * Outputs the prefix config.
      *
      * @param[in]  aConfig  The prefix config.
-     *
      */
     void OutputPrefix(const otBorderRouterConfig &aConfig);
 
     /**
-     * This method outputs the route config.
+     * Outputs the route config.
      *
      * @param[in]  aConfig  The route config.
-     *
      */
     void OutputRoute(const otExternalRouteConfig &aConfig);
 
     /**
-     * This method outputs the service config.
+     * Outputs the service config.
      *
      * @param[in]  aConfig  The service config.
-     *
      */
     void OutputService(const otServiceConfig &aConfig);
 
     /**
-     * This method converts the flags from a given prefix config to string.
+     * Converts the flags from a given prefix config to string.
      *
      * @param[in]  aConfig  The prefix config.
      * @param[out] aString  The string to populate from @a Config flags.
-     *
      */
     static void PrefixFlagsToString(const otBorderRouterConfig &aConfig, FlagsString &aString);
 
     /**
-     * This method converts the flags from a given route config to string.
+     * Converts the flags from a given route config to string.
      *
      * @param[in]  aConfig  The route config.
      * @param[out] aString  The string to populate from @a Config flags.
-     *
      */
     static void RouteFlagsToString(const otExternalRouteConfig &aConfig, FlagsString &aString);
 
 private:
     using Command = CommandEntry<NetworkData>;
+
+    static constexpr uint16_t kAnyRloc16 = 0xffff;
 
     template <CommandId kCommandId> otError Process(Arg aArgs[]);
 
@@ -135,9 +130,14 @@ private:
     otError GetNextService(otNetworkDataIterator *aIterator, otServiceConfig *aConfig, bool aLocal);
 
     otError OutputBinary(bool aLocal);
-    void    OutputPrefixes(bool aLocal);
-    void    OutputRoutes(bool aLocal);
-    void    OutputServices(bool aLocal);
+    void    OutputNetworkData(bool aLocal, uint16_t aRloc16);
+
+#if OPENTHREAD_CONFIG_BORDER_ROUTER_SIGNAL_NETWORK_DATA_FULL
+    static void HandleNetdataFull(void *aContext) { static_cast<NetworkData *>(aContext)->HandleNetdataFull(); }
+    void        HandleNetdataFull(void) { mFullCallbackWasCalled = true; }
+
+    bool mFullCallbackWasCalled;
+#endif
 };
 
 } // namespace Cli

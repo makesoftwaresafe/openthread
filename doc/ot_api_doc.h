@@ -53,10 +53,12 @@
  * @defgroup api-net                  IPv6 Networking
  * @{
  *
- * @defgroup api-dns                  DNSv6
+ * @defgroup api-ble-secure           BLE Secure
+ * @defgroup api-dns                  DNS
  * @defgroup api-dnssd-server         DNS-SD Server
  * @defgroup api-icmp6                ICMPv6
  * @defgroup api-ip6                  IPv6
+ * @defgroup api-mdns                 Multicast DNS
  * @defgroup api-nat64                NAT64
  * @defgroup api-srp                  SRP
  * @defgroup api-ping-sender          Ping Sender
@@ -109,6 +111,7 @@
  * @brief This module includes functions for all Thread roles.
  * @defgroup api-joiner               Joiner
  * @defgroup api-operational-dataset  Operational Dataset
+ * @brief Includes functions for the Operational Dataset API.
  * @defgroup api-thread-router        Router/Leader
  * @brief This module includes functions for Thread Routers and Leaders.
  * @defgroup api-server               Server
@@ -138,8 +141,10 @@
  * @defgroup api-history-tracker      History Tracker
  * @defgroup api-jam-detection        Jam Detection
  * @defgroup api-logging              Logging - Thread Stack
+ * @defgroup api-mesh-diag            Mesh Diagnostics
  * @defgroup api-ncp                  Network Co-Processor
  * @defgroup api-network-time         Network Time Synchronization
+ * @defgroup api-radio                Radio Statistics
  * @defgroup api-random-group         Random Number Generator
  *
  * @{
@@ -150,11 +155,11 @@
  * @}
  *
  * @defgroup api-sntp                 SNTP
+ * @defgroup api-verhoeff-checksum    Verhoeff Checksum
  *
  * @}
  *
  * @}
- *
  */
 
 /**
@@ -165,13 +170,19 @@
  * @{
  *
  * @defgroup plat-alarm               Alarm
+ * @defgroup plat-ble                 BLE
  * @defgroup plat-crypto              Crypto - Platform
+ * @defgroup plat-dns                 DNS - Platform
+ * @defgroup plat-dns-sd              DNS-SD (mDNS)
  * @defgroup plat-entropy             Entropy
  * @defgroup plat-factory-diagnostics Factory Diagnostics - Platform
+ * @defgroup plat-infra-if            Infrastructure Interface
  * @defgroup plat-logging             Logging - Platform
  * @defgroup plat-memory              Memory
  * @defgroup plat-messagepool         Message Pool
  * @defgroup plat-misc                Miscellaneous
+ * @defgroup plat-mdns                Multicast DNS
+ * @defgroup plat-multipan            Multipan
  * @defgroup plat-otns                Network Simulator
  * @defgroup plat-radio               Radio
  * @defgroup plat-settings            Settings
@@ -179,8 +190,6 @@
  * @defgroup plat-time                Time Service
  * @defgroup plat-toolchain           Toolchain
  * @defgroup plat-trel                TREL - Platform
- * @defgroup plat-infra-if            Infrastructure Interface
  *
  * @}
- *
  */

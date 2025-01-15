@@ -34,11 +34,7 @@
 
 #if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
 
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/instance.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 namespace Trel {
@@ -51,13 +47,13 @@ Link::Link(Instance &aInstance)
     , mRxChannel(0)
     , mPanId(Mac::kPanIdBroadcast)
     , mTxPacketNumber(0)
-    , mTxTasklet(aInstance, HandleTxTasklet)
-    , mTimer(aInstance, HandleTimer)
+    , mTxTasklet(aInstance)
+    , mTimer(aInstance)
     , mInterface(aInstance)
 {
-    memset(&mTxFrame, 0, sizeof(mTxFrame));
-    memset(&mRxFrame, 0, sizeof(mRxFrame));
-    memset(mAckFrameBuffer, 0, sizeof(mAckFrameBuffer));
+    ClearAllBytes(mTxFrame);
+    ClearAllBytes(mRxFrame);
+    ClearAllBytes(mAckFrameBuffer);
 
     mTxFrame.mPsdu = &mTxPacketBuffer[kMaxHeaderSize];
     mTxFrame.SetLength(0);
@@ -70,10 +66,7 @@ Link::Link(Instance &aInstance)
     mTimer.Start(kAckWaitWindow);
 }
 
-void Link::AfterInit(void)
-{
-    mInterface.Init();
-}
+void Link::AfterInit(void) { mInterface.Init(); }
 
 void Link::Enable(void)
 {
@@ -116,15 +109,7 @@ void Link::Send(void)
     mTxTasklet.Post();
 }
 
-void Link::HandleTxTasklet(Tasklet &aTasklet)
-{
-    aTasklet.Get<Link>().HandleTxTasklet();
-}
-
-void Link::HandleTxTasklet(void)
-{
-    BeginTransmit();
-}
+void Link::HandleTxTasklet(void) { BeginTransmit(); }
 
 void Link::BeginTransmit(void)
 {
@@ -132,9 +117,9 @@ void Link::BeginTransmit(void)
     Mac::PanId    destPanId;
     Header::Type  type;
     Packet        txPacket;
-    Neighbor *    neighbor   = nullptr;
-    Mac::RxFrame *ackFrame   = nullptr;
-    bool          isDisovery = false;
+    Neighbor     *neighbor    = nullptr;
+    Mac::RxFrame *ackFrame    = nullptr;
+    bool          isDiscovery = false;
 
     VerifyOrExit(mState == kStateTransmit);
 
@@ -181,14 +166,14 @@ void Link::BeginTransmit(void)
 
         if (!mTxFrame.GetSecurityEnabled())
         {
-            isDisovery = true;
+            isDiscovery = true;
         }
         else
         {
             uint8_t keyIdMode;
 
             IgnoreError(mTxFrame.GetKeyIdMode(keyIdMode));
-            isDisovery = (keyIdMode == Mac::Frame::kKeyIdMode2);
+            isDiscovery = (keyIdMode == Mac::Frame::kKeyIdMode2);
         }
     }
 
@@ -223,19 +208,19 @@ void Link::BeginTransmit(void)
 
     LogDebg("BeginTransmit() [%s] plen:%d", txPacket.GetHeader().ToString().AsCString(), txPacket.GetPayloadLength());
 
-    VerifyOrExit(mInterface.Send(txPacket, isDisovery) == kErrorNone, InvokeSendDone(kErrorAbort));
+    VerifyOrExit(mInterface.Send(txPacket, isDiscovery) == kErrorNone, InvokeSendDone(kErrorAbort));
 
     if (mTxFrame.GetAckRequest())
     {
-        uint16_t fcf = Mac::Frame::kFcfFrameAck;
+        uint16_t fcf = Mac::Frame::kTypeAck;
 
         if (!Get<Mle::MleRouter>().IsRxOnWhenIdle())
         {
-            fcf |= Mac::Frame::kFcfFramePending;
+            fcf |= kFcfFramePending;
         }
 
         // Prepare the ack frame (FCF followed by sequence number)
-        Encoding::LittleEndian::WriteUint16(fcf, mAckFrameBuffer);
+        LittleEndian::WriteUint16(fcf, mAckFrameBuffer);
         mAckFrameBuffer[sizeof(fcf)] = mTxFrame.GetSequence();
 
         mRxFrame.mPsdu    = mAckFrameBuffer;
@@ -245,7 +230,7 @@ void Link::BeginTransmit(void)
         mRxFrame.mRadioType = Mac::kRadioTypeTrel;
 #endif
         mRxFrame.mInfo.mRxInfo.mTimestamp             = 0;
-        mRxFrame.mInfo.mRxInfo.mRssi                  = OT_RADIO_RSSI_INVALID;
+        mRxFrame.mInfo.mRxInfo.mRssi                  = Radio::kInvalidRssi;
         mRxFrame.mInfo.mRxInfo.mLqi                   = OT_RADIO_LQI_NONE;
         mRxFrame.mInfo.mRxInfo.mAckedWithFramePending = false;
 
@@ -262,13 +247,8 @@ void Link::InvokeSendDone(Error aError, Mac::RxFrame *aAckFrame)
 {
     SetState(kStateReceive);
 
-    Get<Mac::Mac>().RecordFrameTransmitStatus(mTxFrame, aAckFrame, aError, /* aRetryCount */ 0, /* aWillRetx */ false);
+    Get<Mac::Mac>().RecordFrameTransmitStatus(mTxFrame, aError, /* aRetryCount */ 0, /* aWillRetx */ false);
     Get<Mac::Mac>().HandleTransmitDone(mTxFrame, aAckFrame, aError);
-}
-
-void Link::HandleTimer(Timer &aTimer)
-{
-    aTimer.Get<Link>().HandleTimer();
 }
 
 void Link::HandleTimer(void)
@@ -281,7 +261,7 @@ void Link::HandleTimer(void)
         HandleTimer(child);
     }
 
-    for (Router &router : Get<RouterTable>().Iterate())
+    for (Router &router : Get<RouterTable>())
     {
         HandleTimer(router);
     }
@@ -334,7 +314,7 @@ exit:
     return;
 }
 
-void Link::ProcessReceivedPacket(Packet &aPacket)
+void Link::ProcessReceivedPacket(Packet &aPacket, const Ip6::SockAddr &aSockAddr)
 {
     Header::Type type;
 
@@ -361,6 +341,9 @@ void Link::ProcessReceivedPacket(Packet &aPacket)
 
     // Drop packets originating from same device.
     VerifyOrExit(aPacket.GetHeader().GetSource() != Get<Mac::Mac>().GetExtAddress());
+
+    mRxPacketSenderAddr = aSockAddr;
+    mRxPacketPeer       = Get<Interface>().FindPeer(aPacket.GetHeader().GetSource());
 
     if (type != Header::kTypeBroadcast)
     {
@@ -391,17 +374,51 @@ void Link::ProcessReceivedPacket(Packet &aPacket)
     mRxFrame.mInfo.mRxInfo.mLqi                   = OT_RADIO_LQI_NONE;
     mRxFrame.mInfo.mRxInfo.mAckedWithFramePending = true;
 
+    // As the received frame is processed by the MAC or MLE layers,
+    // `CheckPeerAddrOnRxSuccess()` may be called with different modes,
+    // depending on whether the frame passes receive security checks
+    // at either the MAC or MLE layers, allowing or disallowing peer
+    // socket address to be updated from received TREL packet info.
+
     Get<Mac::Mac>().HandleReceivedFrame(&mRxFrame, kErrorNone);
 
 exit:
-    return;
+    mRxPacketPeer = nullptr;
+}
+
+void Link::CheckPeerAddrOnRxSuccess(PeerSockAddrUpdateMode aMode)
+{
+    Ip6::SockAddr prevSockAddr;
+
+    VerifyOrExit(mState != kStateDisabled);
+
+    VerifyOrExit(mRxPacketPeer != nullptr);
+
+    prevSockAddr = mRxPacketPeer->GetSockAddr();
+    VerifyOrExit(prevSockAddr != mRxPacketSenderAddr);
+
+    LogNote("Peer %s rx sock-addr differs the previously saved one",
+            mRxPacketPeer->GetExtAddress().ToString().AsCString());
+    LogNote("    Rcvd sock-addr:%s", mRxPacketSenderAddr.ToString().AsCString());
+    LogNote("    Prev sock-addr:%s", prevSockAddr.ToString().AsCString());
+
+    if (aMode == kAllowPeerSockAddrUpdate)
+    {
+        LogNote("Updating the peer sock-addr to the newly received");
+        mRxPacketPeer->SetSockAddr(mRxPacketSenderAddr);
+    }
+
+    Get<Interface>().NotifyPeerSocketAddressDifference(prevSockAddr, mRxPacketSenderAddr);
+
+exit:
+    mRxPacketPeer = nullptr;
 }
 
 void Link::HandleAck(Packet &aAckPacket)
 {
     Error        ackError;
     Mac::Address srcAddress;
-    Neighbor *   neighbor;
+    Neighbor    *neighbor;
     uint32_t     ackNumber;
 
     LogDebg("HandleAck() [%s]", aAckPacket.GetHeader().ToString().AsCString());
@@ -431,6 +448,8 @@ void Link::HandleAck(Packet &aAckPacket)
         VerifyOrExit(!neighbor->IsStateInvalid());
 
     } while (ackError == kErrorNoAck);
+
+    CheckPeerAddrOnRxSuccess(kDisallowPeerSockAddrUpdate);
 
 exit:
     return;
@@ -491,10 +510,14 @@ const char *Link::StateToString(State aState)
         "Transmit", // (3) kStateTransmit
     };
 
-    static_assert(0 == kStateDisabled, "kStateDisabled value is incorrect");
-    static_assert(1 == kStateSleep, "kStateSleep value is incorrect");
-    static_assert(2 == kStateReceive, "kStateReceive value is incorrect");
-    static_assert(3 == kStateTransmit, "kStateTransmit value is incorrect");
+    struct EnumCheck
+    {
+        InitEnumValidatorCounter();
+        ValidateNextEnum(kStateDisabled);
+        ValidateNextEnum(kStateSleep);
+        ValidateNextEnum(kStateReceive);
+        ValidateNextEnum(kStateTransmit);
+    };
 
     return kStateStrings[aState];
 }

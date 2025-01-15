@@ -29,7 +29,6 @@
 /**
  * @file
  *   This file includes definitions for managing the Extended PAN ID.
- *
  */
 
 #ifndef MESHCOP_EXTENDED_PANID_HPP_
@@ -50,8 +49,7 @@ namespace ot {
 namespace MeshCoP {
 
 /**
- * This class represents an Extended PAN Identifier.
- *
+ * Represents an Extended PAN Identifier.
  */
 OT_TOOL_PACKED_BEGIN
 class ExtendedPanId : public otExtendedPanId, public Equatable<ExtendedPanId>, public Clearable<ExtendedPanId>
@@ -60,16 +58,14 @@ public:
     static constexpr uint16_t kInfoStringSize = 17; ///< Max chars for the info string (`ToString()`).
 
     /**
-     * This type defines the fixed-length `String` object returned from `ToString()`.
-     *
+     * Defines the fixed-length `String` object returned from `ToString()`.
      */
     typedef String<kInfoStringSize> InfoString;
 
     /**
-     * This method converts an address to a string.
+     * Converts an address to a string.
      *
      * @returns An `InfoString` containing the string representation of the Extended PAN Identifier.
-     *
      */
     InfoString ToString(void) const;
 
@@ -82,23 +78,20 @@ public:
      * Constructor.
      *
      * @param[in]  aInstance  A reference to the OpenThread instance.
-     *
      */
     explicit ExtendedPanIdManager(Instance &aInstance);
 
     /**
-     * This method returns the Extended PAN Identifier.
+     * Returns the Extended PAN Identifier.
      *
      * @returns The Extended PAN Identifier.
-     *
      */
     const ExtendedPanId &GetExtPanId(void) const { return mExtendedPanId; }
 
     /**
-     * This method sets the Extended PAN Identifier.
+     * Sets the Extended PAN Identifier.
      *
      * @param[in]  aExtendedPanId  The Extended PAN Identifier.
-     *
      */
     void SetExtPanId(const ExtendedPanId &aExtendedPanId);
 

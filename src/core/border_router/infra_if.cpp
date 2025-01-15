@@ -31,15 +31,11 @@
  */
 
 #include "infra_if.hpp"
+#include "common/num_utils.hpp"
 
 #if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
 
-#include "border_router/routing_manager.hpp"
-#include "common/as_core_type.hpp"
-#include "common/instance.hpp"
-#include "common/locator_getters.hpp"
-#include "common/logging.hpp"
-#include "net/icmp6.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 namespace BorderRouter {
@@ -59,7 +55,6 @@ Error InfraIf::Init(uint32_t aIfIndex)
     Error error = kErrorNone;
 
     VerifyOrExit(!mInitialized, error = kErrorInvalidState);
-    VerifyOrExit(aIfIndex > 0, error = kErrorInvalidArgs);
 
     mIfIndex     = aIfIndex;
     mInitialized = true;
@@ -79,14 +74,14 @@ void InfraIf::Deinit(void)
     LogInfo("Deinit");
 }
 
-bool InfraIf::HasAddress(const Ip6::Address &aAddress)
+bool InfraIf::HasAddress(const Ip6::Address &aAddress) const
 {
     OT_ASSERT(mInitialized);
 
     return otPlatInfraIfHasAddress(mIfIndex, &aAddress);
 }
 
-Error InfraIf::Send(const Icmp6Packet &aPacket, const Ip6::Address &aDestination)
+Error InfraIf::Send(const Icmp6Packet &aPacket, const Ip6::Address &aDestination) const
 {
     OT_ASSERT(mInitialized);
 
@@ -111,6 +106,42 @@ exit:
     }
 }
 
+Error InfraIf::DiscoverNat64Prefix(void) const
+{
+    OT_ASSERT(mInitialized);
+
+#if OPENTHREAD_CONFIG_NAT64_BORDER_ROUTING_ENABLE
+    return otPlatInfraIfDiscoverNat64Prefix(mIfIndex);
+#else
+    return kErrorNotImplemented;
+#endif
+}
+
+void InfraIf::DiscoverNat64PrefixDone(uint32_t aIfIndex, const Ip6::Prefix &aPrefix)
+{
+    Error error = kErrorNone;
+
+    OT_UNUSED_VARIABLE(aPrefix);
+
+    VerifyOrExit(mInitialized && mIsRunning, error = kErrorInvalidState);
+    VerifyOrExit(aIfIndex == mIfIndex, error = kErrorInvalidArgs);
+
+#if OPENTHREAD_CONFIG_NAT64_BORDER_ROUTING_ENABLE
+    Get<RoutingManager>().HandleDiscoverNat64PrefixDone(aPrefix);
+#endif
+
+exit:
+    if (error != kErrorNone)
+    {
+        LogDebg("Failed to handle discovered NAT64 synthetic addresses: %s", ErrorToString(error));
+    }
+}
+
+Error InfraIf::GetLinkLayerAddress(LinkLayerAddress &aLinkLayerAddress)
+{
+    return otPlatGetInfraIfLinkLayerAddress(&GetInstance(), mIfIndex, &aLinkLayerAddress);
+}
+
 Error InfraIf::HandleStateChanged(uint32_t aIfIndex, bool aIsRunning)
 {
     Error error = kErrorNone;
@@ -125,6 +156,18 @@ Error InfraIf::HandleStateChanged(uint32_t aIfIndex, bool aIsRunning)
 
     Get<RoutingManager>().HandleInfraIfStateChanged();
 
+#if OPENTHREAD_CONFIG_SRP_SERVER_ADVERTISING_PROXY_ENABLE
+    Get<Srp::AdvertisingProxy>().HandleInfraIfStateChanged();
+#endif
+
+#if OPENTHREAD_CONFIG_DNSSD_SERVER_ENABLE && OPENTHREAD_CONFIG_DNSSD_DISCOVERY_PROXY_ENABLE
+    Get<Dns::ServiceDiscovery::Server>().HandleInfraIfStateChanged();
+#endif
+
+#if OPENTHREAD_CONFIG_MULTICAST_DNS_ENABLE && OPENTHREAD_CONFIG_MULTICAST_DNS_AUTO_ENABLE_ON_INFRA_IF
+    Get<Dns::Multicast::Core>().HandleInfraIfStateChanged();
+#endif
+
 exit:
     return error;
 }
@@ -133,16 +176,16 @@ InfraIf::InfoString InfraIf::ToString(void) const
 {
     InfoString string;
 
-    string.Append("infra netif %u", mIfIndex);
+    string.Append("infra netif %lu", ToUlong(mIfIndex));
     return string;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 
-extern "C" void otPlatInfraIfRecvIcmp6Nd(otInstance *        aInstance,
+extern "C" void otPlatInfraIfRecvIcmp6Nd(otInstance         *aInstance,
                                          uint32_t            aInfraIfIndex,
                                          const otIp6Address *aSrcAddress,
-                                         const uint8_t *     aBuffer,
+                                         const uint8_t      *aBuffer,
                                          uint16_t            aBufferLength)
 {
     InfraIf::Icmp6Packet packet;
@@ -156,7 +199,34 @@ extern "C" otError otPlatInfraIfStateChanged(otInstance *aInstance, uint32_t aIn
     return AsCoreType(aInstance).Get<InfraIf>().HandleStateChanged(aInfraIfIndex, aIsRunning);
 }
 
+extern "C" void otPlatInfraIfDiscoverNat64PrefixDone(otInstance        *aInstance,
+                                                     uint32_t           aInfraIfIndex,
+                                                     const otIp6Prefix *aIp6Prefix)
+{
+    AsCoreType(aInstance).Get<InfraIf>().DiscoverNat64PrefixDone(aInfraIfIndex, AsCoreType(aIp6Prefix));
+}
+
 } // namespace BorderRouter
 } // namespace ot
+
+//---------------------------------------------------------------------------------------------------------------------
+
+#if OPENTHREAD_CONFIG_BORDER_ROUTING_MOCK_PLAT_APIS_ENABLE
+OT_TOOL_WEAK bool otPlatInfraIfHasAddress(uint32_t, const otIp6Address *) { return false; }
+
+OT_TOOL_WEAK otError otPlatInfraIfSendIcmp6Nd(uint32_t, const otIp6Address *, const uint8_t *, uint16_t)
+{
+    return OT_ERROR_FAILED;
+}
+
+OT_TOOL_WEAK otError otPlatInfraIfDiscoverNat64Prefix(uint32_t) { return OT_ERROR_FAILED; }
+#endif
+
+extern "C" OT_TOOL_WEAK otError otPlatGetInfraIfLinkLayerAddress(otInstance *,
+                                                                 uint32_t,
+                                                                 otPlatInfraIfLinkLayerAddress *)
+{
+    return OT_ERROR_FAILED;
+}
 
 #endif // OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE

@@ -29,6 +29,8 @@
 add_library(openthread-radio)
 
 target_compile_definitions(openthread-radio PRIVATE
+    OPENTHREAD_FTD=0
+    OPENTHREAD_MTD=0
     OPENTHREAD_RADIO=1
     OPENTHREAD_RADIO_CLI=0
 )
@@ -54,5 +56,6 @@ endif()
 target_link_libraries(openthread-radio
     PRIVATE
         ${OT_MBEDTLS_RCP}
+        ot-config-radio
         ot-config
 )

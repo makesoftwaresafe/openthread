@@ -39,9 +39,7 @@
 #if OPENTHREAD_CONFIG_CHANNEL_MANAGER_ENABLE
 #include <openthread/channel_manager.h>
 #endif
-#if OPENTHREAD_CONFIG_CHILD_SUPERVISION_ENABLE
 #include <openthread/child_supervision.h>
-#endif
 #include <openthread/dataset.h>
 #include <openthread/dataset_ftd.h>
 #include <openthread/diag.h>
@@ -52,7 +50,7 @@
 
 #include "common/code_utils.hpp"
 #include "common/debug.hpp"
-#include "common/instance.hpp"
+#include "instance/instance.hpp"
 #if OPENTHREAD_CONFIG_COMMISSIONER_ENABLE
 #include "meshcop/commissioner.hpp"
 #endif
@@ -87,6 +85,7 @@ exit:
 // MARK: Property/Status Changed
 // ----------------------------------------------------------------------------
 
+#if OPENTHREAD_CONFIG_MLE_PARENT_RESPONSE_CALLBACK_API_ENABLE
 void NcpBase::HandleParentResponseInfo(otThreadParentResponseInfo *aInfo, void *aContext)
 {
     VerifyOrExit(aInfo && aContext);
@@ -118,6 +117,7 @@ void NcpBase::HandleParentResponseInfo(const otThreadParentResponseInfo &aInfo)
 exit:
     return;
 }
+#endif
 
 void NcpBase::HandleNeighborTableChanged(otNeighborTableEvent aEvent, const otNeighborTableEntryInfo *aEntry)
 {
@@ -366,9 +366,9 @@ template <> otError NcpBase::HandlePropertyGet<SPINEL_PROP_THREAD_DUA_ID>(void)
     }
     else
     {
-        for (size_t i = 0; i < sizeof(otIp6InterfaceIdentifier); i++)
+        for (uint8_t i : iid->mFields.m8)
         {
-            SuccessOrExit(error = mEncoder.WriteUint8(iid->mFields.m8[i]));
+            SuccessOrExit(error = mEncoder.WriteUint8(i));
         }
     }
 
@@ -388,9 +388,9 @@ template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_THREAD_DUA_ID>(void)
     {
         otIp6InterfaceIdentifier iid;
 
-        for (size_t i = 0; i < sizeof(otIp6InterfaceIdentifier); i++)
+        for (uint8_t &i : iid.mFields.m8)
         {
-            SuccessOrExit(error = mDecoder.ReadUint8(iid.mFields.m8[i]));
+            SuccessOrExit(error = mDecoder.ReadUint8(i));
         }
 
         SuccessOrExit(error = otThreadSetFixedDuaInterfaceIdentifier(mInstance, &iid));
@@ -763,7 +763,7 @@ template <> otError NcpBase::HandlePropertyInsert<SPINEL_PROP_MESHCOP_COMMISSION
     bool                withDiscerner = false;
     const otExtAddress *eui64;
     uint32_t            timeout;
-    const char *        psk;
+    const char         *psk;
 
     SuccessOrExit(error = mDecoder.OpenStruct());
 
@@ -912,7 +912,7 @@ exit:
 void NcpBase::HandleCommissionerEnergyReport_Jump(uint32_t       aChannelMask,
                                                   const uint8_t *aEnergyData,
                                                   uint8_t        aLength,
-                                                  void *         aContext)
+                                                  void          *aContext)
 {
     static_cast<NcpBase *>(aContext)->HandleCommissionerEnergyReport(aChannelMask, aEnergyData, aLength);
 }
@@ -997,7 +997,7 @@ exit:
 template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_MESHCOP_COMMISSIONER_MGMT_SET>(void)
 {
     otError                error = OT_ERROR_NONE;
-    const uint8_t *        tlvs;
+    const uint8_t         *tlvs;
     uint16_t               length;
     otCommissioningDataset dataset;
 
@@ -1014,8 +1014,8 @@ exit:
 otError NcpBase::HandlePropertySet_SPINEL_PROP_MESHCOP_COMMISSIONER_GENERATE_PSKC(uint8_t aHeader)
 {
     otError        error = OT_ERROR_NONE;
-    const char *   passPhrase;
-    const char *   networkName;
+    const char    *passPhrase;
+    const char    *networkName;
     const uint8_t *extPanIdData;
     uint16_t       length;
     otPskc         pskc;
@@ -1072,7 +1072,7 @@ template <> otError NcpBase::HandlePropertyInsert<SPINEL_PROP_THREAD_JOINERS>(vo
 {
     otError             error         = OT_ERROR_NONE;
     const otExtAddress *eui64         = nullptr;
-    const char *        pskd          = nullptr;
+    const char         *pskd          = nullptr;
     uint32_t            joinerTimeout = 0;
 
     SuccessOrExit(error = mDecoder.ReadUtf8(pskd));
@@ -1210,7 +1210,7 @@ template <> otError NcpBase::HandlePropertyGet<SPINEL_PROP_THREAD_ADDRESS_CACHE_
         if (entry.mState != OT_CACHE_ENTRY_STATE_CACHED)
         {
             SuccessOrExit(error = mEncoder.WriteBool(entry.mCanEvict));
-            SuccessOrExit(error = mEncoder.WriteUint16(entry.mTimeout));
+            SuccessOrExit(error = mEncoder.WriteUint16(entry.mRampDown ? 0 : entry.mTimeout));
             SuccessOrExit(error = mEncoder.WriteUint16(entry.mRetryDelay));
         }
 
@@ -1222,8 +1222,6 @@ template <> otError NcpBase::HandlePropertyGet<SPINEL_PROP_THREAD_ADDRESS_CACHE_
 exit:
     return error;
 }
-
-#if OPENTHREAD_CONFIG_CHILD_SUPERVISION_ENABLE
 
 template <> otError NcpBase::HandlePropertyGet<SPINEL_PROP_CHILD_SUPERVISION_INTERVAL>(void)
 {
@@ -1241,8 +1239,6 @@ template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_CHILD_SUPERVISION_INT
 exit:
     return error;
 }
-
-#endif // OPENTHREAD_CONFIG_CHILD_SUPERVISION_ENABLE
 
 #if OPENTHREAD_CONFIG_CHANNEL_MANAGER_ENABLE
 
@@ -1406,6 +1402,236 @@ exit:
     return error;
 }
 #endif // OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
+
+#if OPENTHREAD_CONFIG_NCP_INFRA_IF_ENABLE && OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_INFRA_IF_STATE>(void)
+{
+    otError  error = OT_ERROR_NONE;
+    uint32_t infraIfIndex;
+    bool     isInfraRunning;
+
+    SuccessOrExit(error = mDecoder.ReadUint32(infraIfIndex));
+    SuccessOrExit(error = mDecoder.ReadBool(isInfraRunning));
+
+    mInfraIfAddrCount = 0;
+    while (!mDecoder.IsAllReadInStruct())
+    {
+        const otIp6Address *addr;
+
+        SuccessOrExit(error = mDecoder.ReadIp6Address(addr));
+        SuccessOrExit(error = InfraIfAddAddress(*addr));
+    }
+
+    if (infraIfIndex != mInfraIfIndex)
+    {
+        mInfraIfIndex = infraIfIndex;
+        IgnoreError(otBorderRoutingSetEnabled(mInstance, /* aEnabled */ false));
+        SuccessOrExit(error = otBorderRoutingInit(mInstance, mInfraIfIndex, isInfraRunning));
+        SuccessOrExit(error = otBorderRoutingSetEnabled(mInstance, /* aEnabled */ true));
+    }
+    else
+    {
+        SuccessOrExit(error = otPlatInfraIfStateChanged(mInstance, mInfraIfIndex, isInfraRunning));
+    }
+
+exit:
+    return error;
+}
+
+template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_INFRA_IF_RECV_ICMP6>(void)
+{
+    otError             error = OT_ERROR_NONE;
+    uint32_t            infraIfIndex;
+    const otIp6Address *address;
+    const uint8_t      *icmp6Data = nullptr;
+    uint16_t            len;
+
+    SuccessOrExit(error = mDecoder.ReadUint32(infraIfIndex));
+    VerifyOrExit(mInfraIfIndex == infraIfIndex, error = OT_ERROR_DROP);
+    SuccessOrExit(error = mDecoder.ReadIp6Address(address));
+    SuccessOrExit(error = mDecoder.ReadData(icmp6Data, len));
+
+    // Currently the ICMP6 messages can only be ND messages.
+    otPlatInfraIfRecvIcmp6Nd(mInstance, infraIfIndex, address, icmp6Data, len);
+
+exit:
+    return error;
+}
+
+otError NcpBase::InfraIfAddAddress(const otIp6Address &aAddress)
+{
+    otError error = OT_ERROR_NONE;
+
+    VerifyOrExit(mInfraIfAddrCount < kMaxInfraIfAddrs, error = OT_ERROR_NO_BUFS);
+    memcpy(&mInfraIfAddrs[mInfraIfAddrCount++], &aAddress, sizeof(aAddress));
+exit:
+    return error;
+}
+
+bool NcpBase::InfraIfContainsAddress(const otIp6Address &aAddress)
+{
+    bool result = false;
+
+    for (uint8_t i = 0; i < mInfraIfAddrCount; i++)
+    {
+        if (memcmp(&mInfraIfAddrs[i], &aAddress, sizeof(aAddress)) == 0)
+        {
+            result = true;
+            break;
+        }
+    }
+    return result;
+}
+
+bool NcpBase::InfraIfHasAddress(uint32_t aInfraIfIndex, const otIp6Address *aAddress)
+{
+    return aInfraIfIndex == mInfraIfIndex && InfraIfContainsAddress(*aAddress);
+}
+
+otError NcpBase::InfraIfSendIcmp6Nd(uint32_t            aInfraIfIndex,
+                                    const otIp6Address *aDestAddress,
+                                    const uint8_t      *aBuffer,
+                                    uint16_t            aBufferLength)
+{
+    otError error  = OT_ERROR_NONE;
+    uint8_t header = SPINEL_HEADER_FLAG | SPINEL_HEADER_IID_0;
+
+    SuccessOrExit(error = mEncoder.BeginFrame(header, SPINEL_CMD_PROP_VALUE_IS, SPINEL_PROP_INFRA_IF_SEND_ICMP6));
+    SuccessOrExit(error = mEncoder.WriteUint32(aInfraIfIndex));
+    SuccessOrExit(error = mEncoder.WriteIp6Address(*aDestAddress));
+    SuccessOrExit(error = mEncoder.WriteDataWithLen(aBuffer, aBufferLength));
+    SuccessOrExit(error = mEncoder.EndFrame());
+
+exit:
+    return error;
+}
+
+#endif // OPENTHREAD_CONFIG_NCP_INFRA_IF_ENABLE && OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+
+#if OPENTHREAD_CONFIG_SRP_SERVER_ENABLE
+template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_SRP_SERVER_ENABLED>(void)
+{
+    otError error = OT_ERROR_NONE;
+    bool    enable;
+
+    SuccessOrExit(error = mDecoder.ReadBool(enable));
+    otSrpServerSetEnabled(mInstance, enable);
+
+exit:
+    return error;
+}
+
+template <> otError NcpBase::HandlePropertyGet<SPINEL_PROP_SRP_SERVER_ENABLED>(void)
+{
+    otSrpServerState srpServerState = otSrpServerGetState(mInstance);
+
+    return mEncoder.WriteBool(srpServerState != OT_SRP_SERVER_STATE_DISABLED);
+}
+
+#if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_SRP_SERVER_AUTO_ENABLE_MODE>(void)
+{
+    otError error = OT_ERROR_NONE;
+    bool    enable;
+
+    SuccessOrExit(error = mDecoder.ReadBool(enable));
+    otSrpServerSetAutoEnableMode(mInstance, enable);
+
+exit:
+    return error;
+}
+
+template <> otError NcpBase::HandlePropertyGet<SPINEL_PROP_SRP_SERVER_AUTO_ENABLE_MODE>(void)
+{
+    return mEncoder.WriteBool(otSrpServerIsAutoEnableMode(mInstance));
+}
+#endif // OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+#endif // OPENTHREAD_CONFIG_SRP_SERVER_ENABLE
+
+#if OPENTHREAD_CONFIG_NCP_DNSSD_ENABLE && OPENTHREAD_CONFIG_PLATFORM_DNSSD_ENABLE
+
+void NcpBase::DnssdRegisterHost(const otPlatDnssdHost      *aHost,
+                                otPlatDnssdRequestId        aRequestId,
+                                otPlatDnssdRegisterCallback aCallback)
+{
+    DnssdUpdate(aHost, aRequestId, aCallback, /* aRegister */ true);
+}
+
+void NcpBase::DnssdUnregisterHost(const otPlatDnssdHost      *aHost,
+                                  otPlatDnssdRequestId        aRequestId,
+                                  otPlatDnssdRegisterCallback aCallback)
+{
+    DnssdUpdate(aHost, aRequestId, aCallback, /* aRegister */ false);
+}
+
+void NcpBase::DnssdRegisterService(const otPlatDnssdService   *aService,
+                                   otPlatDnssdRequestId        aRequestId,
+                                   otPlatDnssdRegisterCallback aCallback)
+{
+    DnssdUpdate(aService, aRequestId, aCallback, /* aRegister */ true);
+}
+
+void NcpBase::DnssdUnregisterService(const otPlatDnssdService   *aService,
+                                     otPlatDnssdRequestId        aRequestId,
+                                     otPlatDnssdRegisterCallback aCallback)
+{
+    DnssdUpdate(aService, aRequestId, aCallback, /* aRegister */ false);
+}
+
+void NcpBase::DnssdRegisterKey(const otPlatDnssdKey       *aKey,
+                               otPlatDnssdRequestId        aRequestId,
+                               otPlatDnssdRegisterCallback aCallback)
+{
+    DnssdUpdate(aKey, aRequestId, aCallback, /* aRegister */ true);
+}
+
+void NcpBase::DnssdUnregisterKey(const otPlatDnssdKey       *aKey,
+                                 otPlatDnssdRequestId        aRequestId,
+                                 otPlatDnssdRegisterCallback aCallback)
+{
+    DnssdUpdate(aKey, aRequestId, aCallback, /* aRegister */ false);
+}
+
+otPlatDnssdState NcpBase::DnssdGetState(void) { return mDnssdState; }
+
+template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_DNSSD_STATE>(void)
+{
+    otError error = OT_ERROR_NONE;
+    uint8_t state;
+
+    SuccessOrExit(error = mDecoder.ReadUint8(state));
+
+    if (state != mDnssdState)
+    {
+        mDnssdState = static_cast<otPlatDnssdState>(state);
+        otPlatDnssdStateHandleStateChange(mInstance);
+    }
+
+exit:
+    return error;
+}
+
+template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_DNSSD_REQUEST_RESULT>(void)
+{
+    otError                     error = OT_ERROR_NONE;
+    otPlatDnssdRequestId        requestId;
+    uint8_t                     result;
+    otPlatDnssdRegisterCallback callback = nullptr;
+    const uint8_t              *context;
+    uint16_t                    contextLen;
+
+    SuccessOrExit(error = mDecoder.ReadUint8(result));
+    SuccessOrExit(error = mDecoder.ReadUint32(requestId));
+    SuccessOrExit(error = mDecoder.ReadData(context, contextLen));
+    VerifyOrExit(contextLen == sizeof(otPlatDnssdRegisterCallback), error = OT_ERROR_PARSE);
+    callback = *reinterpret_cast<const otPlatDnssdRegisterCallback *>(context);
+    callback(mInstance, requestId, static_cast<otError>(result));
+
+exit:
+    return error;
+}
+
+#endif // OPENTHREAD_CONFIG_NCP_DNSSD_ENABLE && OPENTHREAD_CONFIG_PLATFORM_DNSSD_ENABLE
 
 } // namespace Ncp
 } // namespace ot

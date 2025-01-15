@@ -49,6 +49,7 @@
 #include <openthread/tasklet.h>
 #include <openthread/platform/alarm-milli.h>
 
+#include "lib/platform/exit_code.h"
 #include "utils/uart.h"
 
 uint32_t gNodeId = 1;
@@ -61,6 +62,7 @@ char **gArguments      = NULL;
 
 uint64_t sNow = 0; // microseconds
 int      sSockFd;
+uint16_t sPortBase = 9000;
 uint16_t sPortOffset;
 
 static void handleSignal(int aSignal)
@@ -78,7 +80,7 @@ void otSimSendEvent(const struct Event *aEvent)
     memset(&sockaddr, 0, sizeof(sockaddr));
     sockaddr.sin_family = AF_INET;
     inet_pton(AF_INET, "127.0.0.1", &sockaddr.sin_addr);
-    sockaddr.sin_port = htons(9000 + sPortOffset);
+    sockaddr.sin_port = htons(sPortBase + sPortOffset);
 
     rval = sendto(sSockFd, aEvent, offsetof(struct Event, mData) + aEvent->mDataLength, 0, (struct sockaddr *)&sockaddr,
                   sizeof(sockaddr));
@@ -86,7 +88,7 @@ void otSimSendEvent(const struct Event *aEvent)
     if (rval < 0)
     {
         perror("sendto");
-        exit(EXIT_FAILURE);
+        DieNow(OT_EXIT_ERROR_ERRNO);
     }
 }
 
@@ -98,7 +100,7 @@ static void receiveEvent(otInstance *aInstance)
     if (rval < 0 || (uint16_t)rval < offsetof(struct Event, mData))
     {
         perror("recvfrom");
-        exit(EXIT_FAILURE);
+        DieNow(OT_EXIT_ERROR_ERRNO);
     }
 
     platformAlarmAdvanceNow(event.mDelay);
@@ -135,19 +137,11 @@ static void platformSendSleepEvent(void)
 }
 
 #if OPENTHREAD_SIMULATION_VIRTUAL_TIME_UART
-void platformUartRestore(void)
-{
-}
+void platformUartRestore(void) {}
 
-otError otPlatUartEnable(void)
-{
-    return OT_ERROR_NONE;
-}
+otError otPlatUartEnable(void) { return OT_ERROR_NONE; }
 
-otError otPlatUartDisable(void)
-{
-    return OT_ERROR_NONE;
-}
+otError otPlatUartDisable(void) { return OT_ERROR_NONE; }
 
 otError otPlatUartSend(const uint8_t *aData, uint16_t aLength)
 {
@@ -167,37 +161,21 @@ otError otPlatUartSend(const uint8_t *aData, uint16_t aLength)
     return error;
 }
 
-otError otPlatUartFlush(void)
-{
-    return OT_ERROR_NONE;
-}
+otError otPlatUartFlush(void) { return OT_ERROR_NONE; }
 #endif // OPENTHREAD_SIMULATION_VIRTUAL_TIME_UART
 
 static void socket_init(void)
 {
     struct sockaddr_in sockaddr;
-    char *             offset;
     memset(&sockaddr, 0, sizeof(sockaddr));
     sockaddr.sin_family = AF_INET;
 
-    offset = getenv("PORT_OFFSET");
+    parseFromEnvAsUint16("PORT_BASE", &sPortBase);
 
-    if (offset)
-    {
-        char *endptr;
+    parseFromEnvAsUint16("PORT_OFFSET", &sPortOffset);
+    sPortOffset *= (MAX_NETWORK_SIZE + 1);
 
-        sPortOffset = (uint16_t)strtol(offset, &endptr, 0);
-
-        if (*endptr != '\0')
-        {
-            fprintf(stderr, "Invalid PORT_OFFSET: %s\n", offset);
-            exit(EXIT_FAILURE);
-        }
-
-        sPortOffset *= (MAX_NETWORK_SIZE + 1);
-    }
-
-    sockaddr.sin_port        = htons((uint16_t)(9000 + sPortOffset + gNodeId));
+    sockaddr.sin_port        = htons((uint16_t)(sPortBase + sPortOffset + gNodeId));
     sockaddr.sin_addr.s_addr = INADDR_ANY;
 
     sSockFd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -205,13 +183,13 @@ static void socket_init(void)
     if (sSockFd == -1)
     {
         perror("socket");
-        exit(EXIT_FAILURE);
+        DieNow(OT_EXIT_ERROR_ERRNO);
     }
 
     if (bind(sSockFd, (struct sockaddr *)&sockaddr, sizeof(sockaddr)) == -1)
     {
         perror("bind");
-        exit(EXIT_FAILURE);
+        DieNow(OT_EXIT_ERROR_ERRNO);
     }
 }
 
@@ -227,7 +205,7 @@ void otSysInit(int argc, char *argv[])
 
     if (argc != 2)
     {
-        exit(EXIT_FAILURE);
+        DieNow(OT_EXIT_FAILURE);
     }
 
     openlog(basename(argv[0]), LOG_PID, LOG_USER);
@@ -241,7 +219,7 @@ void otSysInit(int argc, char *argv[])
     if (*endptr != '\0' || gNodeId < 1 || gNodeId > MAX_NETWORK_SIZE)
     {
         fprintf(stderr, "Invalid NodeId: %s\n", argv[1]);
-        exit(EXIT_FAILURE);
+        DieNow(OT_EXIT_FAILURE);
     }
 
     socket_init();
@@ -254,15 +232,9 @@ void otSysInit(int argc, char *argv[])
     signal(SIGHUP, &handleSignal);
 }
 
-bool otSysPseudoResetWasRequested(void)
-{
-    return gPlatformPseudoResetWasRequested;
-}
+bool otSysPseudoResetWasRequested(void) { return gPlatformPseudoResetWasRequested; }
 
-void otSysDeinit(void)
-{
-    close(sSockFd);
-}
+void otSysDeinit(void) { close(sSockFd); }
 
 void otSysProcessDrivers(otInstance *aInstance)
 {
@@ -297,7 +269,7 @@ void otSysProcessDrivers(otInstance *aInstance)
         if ((rval < 0) && (errno != EINTR))
         {
             perror("select");
-            exit(EXIT_FAILURE);
+            DieNow(OT_EXIT_ERROR_ERRNO);
         }
 
         if (rval > 0 && FD_ISSET(sSockFd, &read_fds))

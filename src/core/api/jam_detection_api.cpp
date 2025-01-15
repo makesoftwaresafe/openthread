@@ -37,8 +37,7 @@
 
 #include <openthread/jam_detection.h>
 
-#include "common/as_core_type.hpp"
-#include "common/locator_getters.hpp"
+#include "instance/instance.hpp"
 
 using namespace ot;
 
@@ -79,10 +78,7 @@ otError otJamDetectionStart(otInstance *aInstance, otJamDetectionCallback aCallb
     return AsCoreType(aInstance).Get<Utils::JamDetector>().Start(aCallback, aContext);
 }
 
-otError otJamDetectionStop(otInstance *aInstance)
-{
-    return AsCoreType(aInstance).Get<Utils::JamDetector>().Stop();
-}
+otError otJamDetectionStop(otInstance *aInstance) { return AsCoreType(aInstance).Get<Utils::JamDetector>().Stop(); }
 
 bool otJamDetectionIsEnabled(otInstance *aInstance)
 {

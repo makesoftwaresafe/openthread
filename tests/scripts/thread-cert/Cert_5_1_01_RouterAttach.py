@@ -245,7 +245,7 @@ class Cert_5_1_01_RouterAttach(thread_cert.TestCase):
             filter(lambda p: {
                               NL_MAC_EXTENDED_ADDRESS_TLV,
                               NL_STATUS_TLV
-                              } == set(p.coap.tlv.type)\
+                              } <= set(p.coap.tlv.type)\
                    ).\
            must_next()
 
@@ -265,59 +265,14 @@ class Cert_5_1_01_RouterAttach(thread_cert.TestCase):
                               NL_STATUS_TLV,
                               NL_RLOC16_TLV,
                               NL_ROUTER_MASK_TLV
-                              } == set(p.coap.tlv.type) and\
+                              } <= set(p.coap.tlv.type) and\
                    p.coap.code == COAP_CODE_ACK and\
                    p.thread_address.tlv.status == 0\
                    ).\
             must_next()
 
-        # Step 8: Router Sends a Link Request Message.
-        #         The Link Request Message MUST be multicast and contain
-        #         the following TLVs:
-        #             - Challenge TLV
-        #             - Leader Data TLV
-        #             - Source Address TLV
-        #             - Version TLV
-        #             - TLV Request TLV: Link Margin
-
-        pkts.filter_wpan_src64(ROUTER).\
-            filter_LLARMA().\
-            filter_mle_cmd(MLE_LINK_REQUEST).\
-            filter(lambda p: {
-                              CHALLENGE_TLV,
-                              LEADER_DATA_TLV,
-                              SOURCE_ADDRESS_TLV,
-                              VERSION_TLV,
-                              TLV_REQUEST_TLV,
-                              LINK_MARGIN_TLV
-                              } <= set(p.mle.tlv.type)\
-                   ).\
-            must_next()
-
-        # Step 9: Leader sends a Unicast Link Accept and Request Message.
-        #         The Message MUST be unicast to Router
-        #         The Message MUST contain the following TLVs:
-        #             - Leader Data TLV
-        #             - Link-layer Frame Counter TLV
-        #             - Link Margin TLV
-        #             - Response TLV
-        #             - Source Address TLV
-        #             - Version TLV
-        #             - Challenge TLV (optional)
-        #             - MLE Frame Counter TLV (optional)
-
-        pkts.filter_wpan_src64(LEADER).\
-            filter_wpan_dst64(ROUTER).\
-            filter_mle_cmd(MLE_LINK_ACCEPT_AND_REQUEST).\
-            filter(lambda p: {
-                              LEADER_DATA_TLV,
-                              LINK_LAYER_FRAME_COUNTER_TLV,
-                              LINK_MARGIN_TLV,
-                              RESPONSE_TLV,
-                              SOURCE_ADDRESS_TLV,
-                              VERSION_TLV
-                               } <= set(p.mle.tlv.type)).\
-                   must_next()
+        # Steps 8 and 9 are skipped due to change the Link establishment
+        # process (no multicast MLE Link Request by new router).
 
         # Step 10: Router is sending properly formatted MLE Advertisements.
         #          MLE Advertisements MUST be sent with an IP Hop Limit of
@@ -334,7 +289,7 @@ class Cert_5_1_01_RouterAttach(thread_cert.TestCase):
                               LEADER_DATA_TLV,
                               ROUTE64_TLV,
                               SOURCE_ADDRESS_TLV
-                              } == set(p.mle.tlv.type) and\
+                              } <= set(p.mle.tlv.type) and\
                    p.ipv6.hlim == 255).\
             must_next()
 

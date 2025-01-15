@@ -29,27 +29,26 @@
 /**
  * @file
  *   This file includes compile-time configurations for Border Router services.
- *
  */
 
 #ifndef CONFIG_BORDER_ROUTER_H_
 #define CONFIG_BORDER_ROUTER_H_
 
 /**
- * @def OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE
+ * @addtogroup config-border-router
  *
- * Define to 1 to enable Border Agent support.
+ * @brief
+ *   This module includes configuration variables for Border Router services.
  *
+ * @{
  */
-#ifndef OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE
-#define OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE 0
-#endif
+
+#include <config/border_routing.h>
 
 /**
  * @def OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
  *
  * Define to 1 to enable Border Router support.
- *
  */
 #ifndef OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
 #define OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE 0
@@ -75,60 +74,22 @@
  * BRs (determined from the Thread Network Data) that are acting as router is less than two. This mechanism allows up
  * to two eligible Border Routers to request router role upgrade when the number of routers is already above the
  * threshold.
- *
  */
 #ifndef OPENTHREAD_CONFIG_BORDER_ROUTER_REQUEST_ROUTER_ROLE
 #define OPENTHREAD_CONFIG_BORDER_ROUTER_REQUEST_ROUTER_ROLE 1
 #endif
 
 /**
- * @def OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+ * @def OPENTHREAD_CONFIG_BORDER_ROUTER_SIGNAL_NETWORK_DATA_FULL
  *
- * Define to 1 to enable Border Routing support.
- *
+ * Define as 1 to enable mechanism to detect and signal when local or leader Network Data gets full.
  */
-#ifndef OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
-#define OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE 0
+#ifndef OPENTHREAD_CONFIG_BORDER_ROUTER_SIGNAL_NETWORK_DATA_FULL
+#define OPENTHREAD_CONFIG_BORDER_ROUTER_SIGNAL_NETWORK_DATA_FULL OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
 #endif
 
 /**
- * @def OPENTHREAD_CONFIG_BORDER_ROUTING_MAX_DISCOVERED_ROUTERS
- *
- * Specifies maximum number of routers (on infra link) to track by routing manager.
- *
+ * @}
  */
-#ifndef OPENTHREAD_CONFIG_BORDER_ROUTING_MAX_DISCOVERED_ROUTERS
-#define OPENTHREAD_CONFIG_BORDER_ROUTING_MAX_DISCOVERED_ROUTERS 16
-#endif
-
-/**
- * @def OPENTHREAD_CONFIG_BORDER_ROUTING_MAX_DISCOVERED_PREFIXES
- *
- * Specifies maximum number of discovered prefixes (on-link prefixes on the infra link) maintained by routing manager.
- *
- */
-#ifndef OPENTHREAD_CONFIG_BORDER_ROUTING_MAX_DISCOVERED_PREFIXES
-#define OPENTHREAD_CONFIG_BORDER_ROUTING_MAX_DISCOVERED_PREFIXES 64
-#endif
-
-/**
- * @def OPENTHREAD_CONFIG_BORDER_ROUTING_NAT64_ENABLE
- *
- * Define to 1 to enable Border Routing NAT64 support.
- *
- */
-#ifndef OPENTHREAD_CONFIG_BORDER_ROUTING_NAT64_ENABLE
-#define OPENTHREAD_CONFIG_BORDER_ROUTING_NAT64_ENABLE 0
-#endif
-
-/**
- * @def OPENTHREAD_CONFIG_BORDER_AGENT_UDP_PORT
- *
- * Specifies the Border Agent UDP port, and use 0 for ephemeral port.
- *
- */
-#ifndef OPENTHREAD_CONFIG_BORDER_AGENT_UDP_PORT
-#define OPENTHREAD_CONFIG_BORDER_AGENT_UDP_PORT 0
-#endif
 
 #endif // CONFIG_BORDER_ROUTER_H_

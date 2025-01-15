@@ -35,12 +35,7 @@
 
 #if OPENTHREAD_FTD || OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE || OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
 
-#include "common/code_utils.hpp"
-#include "common/instance.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "thread/network_data_leader.hpp"
-#include "thread/network_data_local.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 namespace NetworkData {
@@ -49,9 +44,13 @@ RegisterLogModule("NetworkData");
 
 Notifier::Notifier(Instance &aInstance)
     : InstanceLocator(aInstance)
-    , mTimer(aInstance, HandleTimer)
-    , mSynchronizeDataTask(aInstance, HandleSynchronizeDataTask)
+    , mTimer(aInstance)
+    , mSynchronizeDataTask(aInstance)
+#if OPENTHREAD_CONFIG_BORDER_ROUTER_SIGNAL_NETWORK_DATA_FULL
+    , mNetDataFullTask(aInstance)
+#endif
     , mNextDelay(0)
+    , mOldRloc(Mle::kInvalidRloc16)
     , mWaitingForResponse(false)
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE && OPENTHREAD_CONFIG_BORDER_ROUTER_REQUEST_ROUTER_ROLE
     , mDidRequestRouterRoleUpgrade(false)
@@ -71,11 +70,6 @@ void Notifier::HandleServerDataUpdated(void)
     mSynchronizeDataTask.Post();
 }
 
-void Notifier::HandleSynchronizeDataTask(Tasklet &aTasklet)
-{
-    aTasklet.Get<Notifier>().SynchronizeServerData();
-}
-
 void Notifier::SynchronizeServerData(void)
 {
     Error error = kErrorNotFound;
@@ -86,13 +80,13 @@ void Notifier::SynchronizeServerData(void)
 
 #if OPENTHREAD_FTD
     mNextDelay = kDelayRemoveStaleChildren;
-    error      = Get<Leader>().RemoveStaleChildEntries(&Notifier::HandleCoapResponse, this);
+    error      = RemoveStaleChildEntries();
     VerifyOrExit(error == kErrorNotFound);
 #endif
 
 #if OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE || OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
     mNextDelay = kDelaySynchronizeServerData;
-    error      = Get<Local>().UpdateInconsistentServerData(&Notifier::HandleCoapResponse, this);
+    error      = UpdateInconsistentData();
     VerifyOrExit(error == kErrorNotFound);
 #endif
 
@@ -107,15 +101,122 @@ exit:
         break;
 #if OPENTHREAD_FTD
     case kErrorInvalidState:
-        mTimer.Start(Time::SecToMsec(Get<Mle::MleRouter>().GetRouterSelectionJitterTimeout() + 1));
+        mTimer.Start(Time::SecToMsec(Get<Mle::MleRouter>().GetRouterRoleTransitionTimeout() + 1));
         break;
 #endif
     case kErrorNotFound:
         break;
     default:
         OT_ASSERT(false);
-        OT_UNREACHABLE_CODE(break);
     }
+}
+
+#if OPENTHREAD_FTD
+Error Notifier::RemoveStaleChildEntries(void)
+{
+    // Check if there is any stale child entry in network data and send
+    // a "Server Data" notification to leader to remove it.
+    //
+    // - `kErrorNone` when a stale child entry was found and successfully
+    //    sent a "Server Data" notification to leader.
+    // - `kErrorNoBufs` if could not allocate message to send message.
+    // - `kErrorNotFound` if no stale child entries were found.
+
+    Error error = kErrorNotFound;
+    Rlocs rlocs;
+
+    VerifyOrExit(Get<Mle::MleRouter>().IsRouterOrLeader());
+
+    Get<Leader>().FindRlocs(kAnyBrOrServer, kAnyRole, rlocs);
+
+    for (uint16_t rloc16 : rlocs)
+    {
+        if (Mle::IsChildRloc16(rloc16) && Get<Mle::Mle>().HasMatchingRouterIdWith(rloc16) &&
+            Get<ChildTable>().FindChild(rloc16, Child::kInStateValid) == nullptr)
+        {
+            error = SendServerDataNotification(rloc16);
+            ExitNow();
+        }
+    }
+
+exit:
+    return error;
+}
+#endif // OPENTHREAD_FTD
+
+#if OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE || OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
+Error Notifier::UpdateInconsistentData(void)
+{
+    Error    error      = kErrorNone;
+    uint16_t deviceRloc = Get<Mle::MleRouter>().GetRloc16();
+
+#if OPENTHREAD_FTD
+    // Don't send this Server Data Notification if the device is going
+    // to upgrade to Router.
+
+    if (Get<Mle::MleRouter>().IsExpectedToBecomeRouterSoon())
+    {
+        ExitNow(error = kErrorInvalidState);
+    }
+#endif
+
+    Get<Local>().UpdateRloc();
+
+    if (Get<Leader>().ContainsEntriesFrom(Get<Local>(), deviceRloc) &&
+        Get<Local>().ContainsEntriesFrom(Get<Leader>(), deviceRloc))
+    {
+        ExitNow(error = kErrorNotFound);
+    }
+
+    if (mOldRloc == deviceRloc)
+    {
+        mOldRloc = Mle::kInvalidRloc16;
+    }
+
+    SuccessOrExit(error = SendServerDataNotification(mOldRloc, &Get<Local>()));
+    mOldRloc = deviceRloc;
+
+exit:
+    return error;
+}
+#endif // #if OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE || OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
+
+Error Notifier::SendServerDataNotification(uint16_t aOldRloc16, const NetworkData *aNetworkData)
+{
+    Error            error = kErrorNone;
+    Coap::Message   *message;
+    Tmf::MessageInfo messageInfo(GetInstance());
+
+    message = Get<Tmf::Agent>().NewPriorityConfirmablePostMessage(kUriServerData);
+    VerifyOrExit(message != nullptr, error = kErrorNoBufs);
+
+    if (aNetworkData != nullptr)
+    {
+        ThreadTlv tlv;
+
+        tlv.SetType(ThreadTlv::kThreadNetworkData);
+        tlv.SetLength(aNetworkData->GetLength());
+        SuccessOrExit(error = message->Append(tlv));
+        SuccessOrExit(error = message->AppendBytes(aNetworkData->GetBytes(), aNetworkData->GetLength()));
+
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_BORDER_ROUTER_SIGNAL_NETWORK_DATA_FULL
+        Get<Leader>().CheckForNetDataGettingFull(*aNetworkData, aOldRloc16);
+#endif
+    }
+
+    if (aOldRloc16 != Mle::kInvalidRloc16)
+    {
+        SuccessOrExit(error = Tlv::Append<ThreadRloc16Tlv>(*message, aOldRloc16));
+    }
+
+    messageInfo.SetSockAddrToRlocPeerAddrToLeaderAloc();
+    SuccessOrExit(error = Get<Tmf::Agent>().SendMessage(*message, messageInfo, HandleCoapResponse, this));
+
+    LogInfo("Sent %s", UriToString<kUriServerData>());
+
+exit:
+    FreeMessageOnError(message, error);
+    return error;
 }
 
 void Notifier::HandleNotifierEvents(Events aEvents)
@@ -143,17 +244,12 @@ void Notifier::HandleNotifierEvents(Events aEvents)
     }
 }
 
-void Notifier::HandleTimer(Timer &aTimer)
-{
-    aTimer.Get<Notifier>().HandleTimer();
-}
+void Notifier::HandleTimer(void) { SynchronizeServerData(); }
 
-void Notifier::HandleTimer(void)
-{
-    SynchronizeServerData();
-}
-
-void Notifier::HandleCoapResponse(void *aContext, otMessage *aMessage, const otMessageInfo *aMessageInfo, Error aResult)
+void Notifier::HandleCoapResponse(void                *aContext,
+                                  otMessage           *aMessage,
+                                  const otMessageInfo *aMessageInfo,
+                                  otError              aResult)
 {
     OT_UNUSED_VARIABLE(aMessage);
     OT_UNUSED_VARIABLE(aMessageInfo);
@@ -178,9 +274,17 @@ void Notifier::HandleCoapResponse(Error aResult)
 
     default:
         OT_ASSERT(false);
-        OT_UNREACHABLE_CODE(break);
     }
 }
+
+#if OPENTHREAD_CONFIG_BORDER_ROUTER_SIGNAL_NETWORK_DATA_FULL
+void Notifier::SetNetDataFullCallback(NetDataCallback aCallback, void *aContext)
+{
+    mNetDataFullCallback.Set(aCallback, aContext);
+}
+
+void Notifier::HandleNetDataFull(void) { mNetDataFullCallback.InvokeIfSet(); }
+#endif
 
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE && OPENTHREAD_CONFIG_BORDER_ROUTER_REQUEST_ROUTER_ROLE
 

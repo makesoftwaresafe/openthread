@@ -40,6 +40,8 @@
 
 #include <openthread/platform/debug_uart.h>
 
+#include "simul_utils.h"
+#include "lib/platform/exit_code.h"
 #include "utils/code_utils.h"
 #include "utils/uart.h"
 
@@ -54,15 +56,9 @@ static int            s_out_fd;
 static struct termios original_stdin_termios;
 static struct termios original_stdout_termios;
 
-static void restore_stdin_termios(void)
-{
-    tcsetattr(s_in_fd, TCSAFLUSH, &original_stdin_termios);
-}
+static void restore_stdin_termios(void) { tcsetattr(s_in_fd, TCSAFLUSH, &original_stdin_termios); }
 
-static void restore_stdout_termios(void)
-{
-    tcsetattr(s_out_fd, TCSAFLUSH, &original_stdout_termios);
-}
+static void restore_stdout_termios(void) { tcsetattr(s_out_fd, TCSAFLUSH, &original_stdout_termios); }
 
 void platformUartRestore(void)
 {
@@ -178,34 +174,13 @@ exit:
 
 void platformUartUpdateFdSet(fd_set *aReadFdSet, fd_set *aWriteFdSet, fd_set *aErrorFdSet, int *aMaxFd)
 {
-    if (aReadFdSet != NULL)
+    utilsAddFdToFdSet(s_in_fd, aReadFdSet, aMaxFd);
+    utilsAddFdToFdSet(s_in_fd, aErrorFdSet, aMaxFd);
+
+    if ((s_write_length > 0))
     {
-        FD_SET(s_in_fd, aReadFdSet);
-
-        if (aErrorFdSet != NULL)
-        {
-            FD_SET(s_in_fd, aErrorFdSet);
-        }
-
-        if (aMaxFd != NULL && *aMaxFd < s_in_fd)
-        {
-            *aMaxFd = s_in_fd;
-        }
-    }
-
-    if ((aWriteFdSet != NULL) && (s_write_length > 0))
-    {
-        FD_SET(s_out_fd, aWriteFdSet);
-
-        if (aErrorFdSet != NULL)
-        {
-            FD_SET(s_out_fd, aErrorFdSet);
-        }
-
-        if (aMaxFd != NULL && *aMaxFd < s_out_fd)
-        {
-            *aMaxFd = s_out_fd;
-        }
+        utilsAddFdToFdSet(s_out_fd, aWriteFdSet, aMaxFd);
+        utilsAddFdToFdSet(s_out_fd, aErrorFdSet, aMaxFd);
     }
 }
 
@@ -229,7 +204,7 @@ otError otPlatUartFlush(void)
     else
     {
         perror("write(UART)");
-        exit(EXIT_FAILURE);
+        DieNow(OT_EXIT_ERROR_ERRNO);
     }
 
 exit:
@@ -241,8 +216,8 @@ void platformUartProcess(void)
     ssize_t       rval;
     const int     error_flags = POLLERR | POLLNVAL | POLLHUP;
     struct pollfd pollfd[]    = {
-        {s_in_fd, POLLIN | error_flags, 0},
-        {s_out_fd, POLLOUT | error_flags, 0},
+           {s_in_fd, POLLIN | error_flags, 0},
+           {s_out_fd, POLLOUT | error_flags, 0},
     };
 
     errno = 0;
@@ -252,7 +227,7 @@ void platformUartProcess(void)
     if (rval < 0)
     {
         perror("poll");
-        exit(EXIT_FAILURE);
+        DieNow(OT_EXIT_ERROR_ERRNO);
     }
 
     if (rval > 0)
@@ -260,13 +235,13 @@ void platformUartProcess(void)
         if ((pollfd[0].revents & error_flags) != 0)
         {
             perror("s_in_fd");
-            exit(EXIT_FAILURE);
+            DieNow(OT_EXIT_ERROR_ERRNO);
         }
 
         if ((pollfd[1].revents & error_flags) != 0)
         {
             perror("s_out_fd");
-            exit(EXIT_FAILURE);
+            DieNow(OT_EXIT_ERROR_ERRNO);
         }
 
         if (pollfd[0].revents & POLLIN)
@@ -276,7 +251,7 @@ void platformUartProcess(void)
             if (rval <= 0)
             {
                 perror("read");
-                exit(EXIT_FAILURE);
+                DieNow(OT_EXIT_ERROR_ERRNO);
             }
 
             otPlatUartReceived(s_receive_buffer, (uint16_t)rval);
@@ -299,7 +274,7 @@ void platformUartProcess(void)
             else if (errno != EINTR)
             {
                 perror("write");
-                exit(EXIT_FAILURE);
+                DieNow(OT_EXIT_ERROR_ERRNO);
             }
         }
     }

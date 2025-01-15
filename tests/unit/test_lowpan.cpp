@@ -31,12 +31,10 @@
 #include "test_platform.h"
 #include "test_util.hpp"
 
-using namespace ot;
-
 namespace ot {
 
-ot::Instance *  sInstance;
-Ip6::Ip6 *      sIp6;
+Instance       *sInstance;
+Ip6::Ip6       *sIp6;
 Lowpan::Lowpan *sLowpan;
 
 void TestIphcVector::GetCompressedStream(uint8_t *aIphc, uint16_t &aIphcLength)
@@ -99,12 +97,12 @@ void TestIphcVector::GetUncompressedStream(Message &aMessage)
 }
 
 /**
- * This function initializes Thread Interface.
- *
+ * Initializes Thread Interface.
  */
 static void Init(void)
 {
     otMeshLocalPrefix meshLocalPrefix = {{0xfd, 0x00, 0xca, 0xfe, 0xfa, 0xce, 0x12, 0x34}};
+    OffsetRange       offsetRange;
 
     sInstance->Get<Mle::MleRouter>().SetMeshLocalPrefix(static_cast<Ip6::NetworkPrefix &>(meshLocalPrefix));
 
@@ -129,11 +127,14 @@ static void Init(void)
 
     SuccessOrQuit(message->AppendBytes(mockNetworkData, sizeof(mockNetworkData)));
 
-    IgnoreError(sInstance->Get<NetworkData::Leader>().SetNetworkData(0, 0, NetworkData::kStableSubset, *message, 0));
+    offsetRange.Init(2, 0x20);
+
+    IgnoreError(
+        sInstance->Get<NetworkData::Leader>().SetNetworkData(0, 0, NetworkData::kStableSubset, *message, offsetRange));
 }
 
 /**
- * This function performs compression or/and decompression based on the given test vector.
+ * Performs compression or/and decompression based on the given test vector.
  *
  * @note Performing decompression and compression on the same LOWPAN_IPHC frame may give different result.
  *       This situation may occur when sender does not use the best possible compression,
@@ -145,7 +146,7 @@ static void Init(void)
  */
 static void Test(TestIphcVector &aVector, bool aCompress, bool aDecompress)
 {
-    Message * message = nullptr;
+    Message  *message = nullptr;
     uint8_t   result[512];
     uint8_t   iphc[512];
     uint8_t   ip6[512];
@@ -171,20 +172,21 @@ static void Test(TestIphcVector &aVector, bool aCompress, bool aDecompress)
 
     if (aCompress)
     {
-        Lowpan::BufferWriter buffer(result, 127);
-        Message *            compressedMsg;
-        Ip6::Ecn             ecn;
+        FrameBuilder frameBuilder;
+        Message     *compressedMsg;
+        Ip6::Ecn     ecn;
+
+        frameBuilder.Init(result, 127);
 
         VerifyOrQuit((message = sInstance->Get<MessagePool>().Allocate(Message::kTypeIp6)) != nullptr);
 
         aVector.GetUncompressedStream(*message);
 
-        VerifyOrQuit(sLowpan->Compress(*message, aVector.mMacSource, aVector.mMacDestination, buffer) ==
-                     aVector.mError);
+        VerifyOrQuit(sLowpan->Compress(*message, aVector.mMacAddrs, frameBuilder) == aVector.mError);
 
         if (aVector.mError == kErrorNone)
         {
-            uint8_t compressBytes = static_cast<uint8_t>(buffer.GetWritePointer() - result);
+            uint16_t compressBytes = frameBuilder.GetLength();
 
             // Append payload to the LOWPAN_IPHC.
             message->ReadBytes(message->GetOffset(), result + compressBytes,
@@ -227,7 +229,7 @@ static void Test(TestIphcVector &aVector, bool aCompress, bool aDecompress)
 
         frameData.Init(iphc, iphcLength);
 
-        error = sLowpan->Decompress(*message, aVector.mMacSource, aVector.mMacDestination, frameData, 0);
+        error = sLowpan->Decompress(*message, aVector.mMacAddrs, frameData, 0);
 
         message->ReadBytes(0, result, message->GetLength());
 
@@ -275,7 +277,7 @@ static const uint8_t sTestPayloadDefault[] = {0x80, 0x00, 0x01, 0x02, 0x03, 0x04
 
 static void TestFullyCompressableLongAddresses(void)
 {
-    TestIphcVector testVector("Fully compressable IPv6 addresses using long MAC addresses");
+    TestIphcVector testVector("Fully compressible IPv6 addresses using long MAC addresses");
 
     // Setup MAC addresses.
     testVector.SetMacSource(sTestMacSourceDefaultLong);
@@ -300,7 +302,7 @@ static void TestFullyCompressableLongAddresses(void)
 
 static void TestFullyCompressableShortAddresses(void)
 {
-    TestIphcVector testVector("Fully compressable IPv6 addresses using short MAC addresses");
+    TestIphcVector testVector("Fully compressible IPv6 addresses using short MAC addresses");
 
     // Setup MAC addresses.
     testVector.SetMacSource(sTestMacSourceDefaultShort);
@@ -325,7 +327,7 @@ static void TestFullyCompressableShortAddresses(void)
 
 static void TestFullyCompressableShortLongAddresses(void)
 {
-    TestIphcVector testVector("Fully compressable IPv6 addresses using short and long MAC addresses");
+    TestIphcVector testVector("Fully compressible IPv6 addresses using short and long MAC addresses");
 
     // Setup MAC addresses.
     testVector.SetMacSource(sTestMacSourceDefaultShort);
@@ -350,7 +352,7 @@ static void TestFullyCompressableShortLongAddresses(void)
 
 static void TestFullyCompressableLongShortAddresses(void)
 {
-    TestIphcVector testVector("Fully compressable IPv6 addresses using long and short MAC addresses");
+    TestIphcVector testVector("Fully compressible IPv6 addresses using long and short MAC addresses");
 
     // Setup MAC addresses.
     testVector.SetMacSource(sTestMacSourceDefaultLong);
@@ -503,7 +505,7 @@ static void TestSource16bitDestination16bitAddresses(void)
 
 static void TestSourceCompressedDestination16bitAddresses(void)
 {
-    TestIphcVector testVector("Fully compressable IPv6 source and destination 16-bit using long MAC addresses");
+    TestIphcVector testVector("Fully compressible IPv6 source and destination 16-bit using long MAC addresses");
 
     // Setup MAC addresses.
     testVector.SetMacSource(sTestMacSourceDefaultLong);
@@ -528,7 +530,7 @@ static void TestSourceCompressedDestination16bitAddresses(void)
 
 static void TestSourceCompressedDestination128bitAddresses(void)
 {
-    TestIphcVector testVector("Fully compressable IPv6 source and destination inline using long MAC addresses");
+    TestIphcVector testVector("Fully compressible IPv6 source and destination inline using long MAC addresses");
 
     // Setup MAC addresses.
     testVector.SetMacSource(sTestMacSourceDefaultLong);
@@ -732,7 +734,7 @@ static void TestStatefulSource16bitDestination16bitContext0(void)
 
 static void TestStatefulCompressableLongAddressesContext0(void)
 {
-    TestIphcVector testVector("Stateful compression compressable long addresses, context 0");
+    TestIphcVector testVector("Stateful compression compressible long addresses, context 0");
 
     // Setup MAC addresses.
     testVector.SetMacSource(sTestMacSourceDefaultLong);
@@ -757,7 +759,7 @@ static void TestStatefulCompressableLongAddressesContext0(void)
 
 static void TestStatefulCompressableShortAddressesContext0(void)
 {
-    TestIphcVector testVector("Stateful compression compressable short addresses, context 0");
+    TestIphcVector testVector("Stateful compression compressible short addresses, context 0");
 
     // Setup MAC addresses.
     testVector.SetMacSource(sTestMacSourceDefaultShort);
@@ -782,7 +784,7 @@ static void TestStatefulCompressableShortAddressesContext0(void)
 
 static void TestStatefulCompressableLongShortAddressesContext0(void)
 {
-    TestIphcVector testVector("Stateful compression compressable long and short addresses, context 0");
+    TestIphcVector testVector("Stateful compression compressible long and short addresses, context 0");
 
     // Setup MAC addresses.
     testVector.SetMacSource(sTestMacSourceDefaultLong);
@@ -1868,6 +1870,7 @@ void TestLowpanMeshHeader(void)
     uint8_t            frame[kMaxFrameSize];
     uint16_t           length;
     FrameData          frameData;
+    FrameBuilder       frameBuilder;
     Lowpan::MeshHeader meshHeader;
 
     meshHeader.Init(kSourceAddr, kDestAddr, 1);
@@ -1875,10 +1878,12 @@ void TestLowpanMeshHeader(void)
     VerifyOrQuit(meshHeader.GetDestination() == kDestAddr, "failed after Init()");
     VerifyOrQuit(meshHeader.GetHopsLeft() == 1, "failed after Init()");
 
-    length = meshHeader.WriteTo(frame);
+    frameBuilder.Init(frame, sizeof(frame));
+    SuccessOrQuit(meshHeader.AppendTo(frameBuilder));
+    length = frameBuilder.GetLength();
     VerifyOrQuit(length == meshHeader.GetHeaderLength());
-    VerifyOrQuit(length == sizeof(kMeshHeader1), "MeshHeader::WriteTo() returned length is incorrect");
-    VerifyOrQuit(memcmp(frame, kMeshHeader1, length) == 0, "MeshHeader::WriteTo() failed");
+    VerifyOrQuit(length == sizeof(kMeshHeader1), "MeshHeader::AppendTo() returned length is incorrect");
+    VerifyOrQuit(memcmp(frame, kMeshHeader1, length) == 0, "MeshHeader::AppendTo() failed");
 
     memset(&meshHeader, 0, sizeof(meshHeader));
     frameData.Init(frame, length);
@@ -1901,10 +1906,12 @@ void TestLowpanMeshHeader(void)
     VerifyOrQuit(meshHeader.GetDestination() == kDestAddr, "failed after Init()");
     VerifyOrQuit(meshHeader.GetHopsLeft() == 0x20, "failed after Init()");
 
-    length = meshHeader.WriteTo(frame);
-    VerifyOrQuit(length == sizeof(kMeshHeader2), "MeshHeader::WriteTo() returned length is incorrect");
+    frameBuilder.Init(frame, sizeof(frame));
+    SuccessOrQuit(meshHeader.AppendTo(frameBuilder));
+    length = frameBuilder.GetLength();
+    VerifyOrQuit(length == sizeof(kMeshHeader2), "MeshHeader::AppendTo() returned length is incorrect");
     VerifyOrQuit(length == meshHeader.GetHeaderLength());
-    VerifyOrQuit(memcmp(frame, kMeshHeader2, length) == 0, "MeshHeader::WriteTo() failed");
+    VerifyOrQuit(memcmp(frame, kMeshHeader2, length) == 0, "MeshHeader::AppendTo() failed");
 
     memset(&meshHeader, 0, sizeof(meshHeader));
     frameData.Init(frame, length);
@@ -1931,7 +1938,9 @@ void TestLowpanMeshHeader(void)
     VerifyOrQuit(meshHeader.GetDestination() == kDestAddr, "failed after ParseFrom()");
     VerifyOrQuit(meshHeader.GetHopsLeft() == 1, "failed after ParseFrom()");
 
-    VerifyOrQuit(meshHeader.WriteTo(frame) == sizeof(kMeshHeader1));
+    frameBuilder.Init(frame, sizeof(frame));
+    SuccessOrQuit(meshHeader.AppendTo(frameBuilder));
+    VerifyOrQuit(frameBuilder.GetLength() == sizeof(kMeshHeader1));
 
     frameData.Init(kMeshHeader3, sizeof(kMeshHeader3) - 1);
     VerifyOrQuit(meshHeader.ParseFrom(frameData) == kErrorParse,
@@ -1940,13 +1949,10 @@ void TestLowpanMeshHeader(void)
 
 void TestLowpanFragmentHeader(void)
 {
-    enum
-    {
-        kMaxFrameSize = 127,
-        kSize         = 0x7ef,
-        kTag          = 0x1234,
-        kOffset       = (100 * 8),
-    };
+    static constexpr uint16_t kMaxFrameSize = 127;
+    static constexpr uint16_t kSize         = 0x7ef;
+    static constexpr uint16_t kTag          = 0x1234;
+    static constexpr uint16_t kOffset       = (100 * 8);
 
     const uint8_t kFragHeader1[] = {0xc7, 0xef, 0x12, 0x34};       // size:0x7ef, tag:0x1234, offset:0 (first frag)
     const uint8_t kFragHeader2[] = {0xe7, 0xef, 0x12, 0x34, 0x64}; // size:0x7ef, tag:0x1234, offset:100 (next frag)
@@ -1956,21 +1962,22 @@ void TestLowpanFragmentHeader(void)
     const uint8_t kInvalidFragHeader2[] = {0xd0, 0xef, 0x12, 0x34, 0x64};
     const uint8_t kInvalidFragHeader3[] = {0x90, 0xef, 0x12, 0x34, 0x64};
 
-    uint8_t                frame[kMaxFrameSize];
-    uint16_t               length;
-    FrameData              frameData;
-    Lowpan::FragmentHeader fragHeader;
+    uint8_t                           frame[kMaxFrameSize];
+    uint16_t                          length;
+    FrameData                         frameData;
+    FrameBuilder                      frameBuilder;
+    Lowpan::FragmentHeader            fragHeader;
+    Lowpan::FragmentHeader::FirstFrag firstFragHeader;
+    Lowpan::FragmentHeader::NextFrag  nextFragHeader;
 
-    fragHeader.InitFirstFragment(kSize, kTag);
-    VerifyOrQuit(fragHeader.GetDatagramSize() == kSize, "failed after Init");
-    VerifyOrQuit(fragHeader.GetDatagramTag() == kTag, "failed after Init()");
-    VerifyOrQuit(fragHeader.GetDatagramOffset() == 0, "failed after Init()");
+    frameBuilder.Init(frame, sizeof(frame));
 
-    length = fragHeader.WriteTo(frame);
-    VerifyOrQuit(length == Lowpan::FragmentHeader::kFirstFragmentHeaderSize,
-                 "FragmentHeader::WriteTo() returned length is incorrect");
-    VerifyOrQuit(length == sizeof(kFragHeader1), "FragmentHeader::WriteTo() returned length is incorrect");
-    VerifyOrQuit(memcmp(frame, kFragHeader1, length) == 0, "FragmentHeader::WriteTo() failed");
+    firstFragHeader.Init(kSize, kTag);
+    SuccessOrQuit(frameBuilder.Append(firstFragHeader));
+
+    length = frameBuilder.GetLength();
+    VerifyOrQuit(length == sizeof(Lowpan::FragmentHeader::FirstFrag));
+    VerifyOrQuit(memcmp(frame, kFragHeader1, length) == 0);
 
     memset(&fragHeader, 0, sizeof(fragHeader));
 
@@ -1991,22 +1998,27 @@ void TestLowpanFragmentHeader(void)
 
     //- - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    fragHeader.Init(kSize, kTag, kOffset);
-    VerifyOrQuit(fragHeader.GetDatagramSize() == kSize, "failed after Init");
-    VerifyOrQuit(fragHeader.GetDatagramTag() == kTag, "failed after Init()");
-    VerifyOrQuit(fragHeader.GetDatagramOffset() == kOffset, "failed after Init()");
+    frameBuilder.Init(frame, sizeof(frame));
+    nextFragHeader.Init(kSize, kTag, kOffset);
+    SuccessOrQuit(frameBuilder.Append(nextFragHeader));
+    length = frameBuilder.GetLength();
+    VerifyOrQuit(length == sizeof(kFragHeader2));
+    VerifyOrQuit(memcmp(frame, kFragHeader2, length) == 0);
 
     // Check the truncation of offset (to be multiple of 8).
-    fragHeader.Init(kSize, kTag, kOffset + 1);
-    VerifyOrQuit(fragHeader.GetDatagramOffset() == kOffset, "FragmentHeader::GetDatagramOffset() did not truncate");
-    fragHeader.Init(kSize, kTag, kOffset + 7);
-    VerifyOrQuit(fragHeader.GetDatagramOffset() == kOffset, "FragmentHeader::GetDatagramOffset() did not truncate");
+    frameBuilder.Init(frame, sizeof(frame));
+    nextFragHeader.Init(kSize, kTag, kOffset + 1);
+    SuccessOrQuit(frameBuilder.Append(nextFragHeader));
+    length = frameBuilder.GetLength();
+    VerifyOrQuit(length == sizeof(kFragHeader2));
+    VerifyOrQuit(memcmp(frame, kFragHeader2, length) == 0);
 
-    length = fragHeader.WriteTo(frame);
-    VerifyOrQuit(length == Lowpan::FragmentHeader::kSubsequentFragmentHeaderSize,
-                 "FragmentHeader::WriteTo() returned length is incorrect");
-    VerifyOrQuit(length == sizeof(kFragHeader2), "FragmentHeader::WriteTo() returned length is incorrect");
-    VerifyOrQuit(memcmp(frame, kFragHeader2, length) == 0, "FragmentHeader::WriteTo() failed");
+    frameBuilder.Init(frame, sizeof(frame));
+    nextFragHeader.Init(kSize, kTag, kOffset + 7);
+    SuccessOrQuit(frameBuilder.Append(nextFragHeader));
+    length = frameBuilder.GetLength();
+    VerifyOrQuit(length == sizeof(kFragHeader2));
+    VerifyOrQuit(memcmp(frame, kFragHeader2, length) == 0);
 
     memset(&fragHeader, 0, sizeof(fragHeader));
     frameData.Init(frame, length);
@@ -2079,9 +2091,9 @@ void TestLowpanFragmentHeader(void)
 
 int main(void)
 {
-    TestLowpanIphc();
-    TestLowpanMeshHeader();
-    TestLowpanFragmentHeader();
+    ot::TestLowpanIphc();
+    ot::TestLowpanMeshHeader();
+    ot::TestLowpanFragmentHeader();
 
     printf("All tests passed\n");
     return 0;

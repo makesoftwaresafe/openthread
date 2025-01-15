@@ -29,7 +29,6 @@
 /**
  * @file
  *   This file implements an entropy source based on /dev/urandom or pseudo-random generator.
- *
  */
 
 #include "platform-simulation.h"
@@ -93,7 +92,7 @@ otError otPlatEntropyGet(uint8_t *aOutput, uint16_t aOutputLength)
 
 #if __SANITIZE_ADDRESS__ == 0
 
-    FILE * file = NULL;
+    FILE  *file = NULL;
     size_t readLength;
 
     otEXPECT_ACTION(aOutput && aOutputLength, error = OT_ERROR_INVALID_ARGS);

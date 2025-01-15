@@ -59,7 +59,7 @@ namespace Utils {
  */
 
 /**
- * This class implements the channel monitoring logic.
+ * Implements the channel monitoring logic.
  *
  * Channel Monitoring will periodically monitor all channels to help determine the cleaner channels (channels
  * with less interference).
@@ -69,14 +69,12 @@ namespace Utils {
  * threshold `kRssiThreshold`. As an indicator of channel quality, the `ChannelMonitor` maintains and provides the
  * average rate/percentage of RSSI samples that are above the threshold within (approximately) a specified sample
  * window (referred to as "channel occupancy").
- *
  */
 class ChannelMonitor : public InstanceLocator, private NonCopyable
 {
 public:
     /**
      * The channel RSSI sample interval in milliseconds.
-     *
      */
     static constexpr uint32_t kSampleInterval = OPENTHREAD_CONFIG_CHANNEL_MONITOR_SAMPLE_INTERVAL;
 
@@ -84,70 +82,62 @@ public:
      * The RSSI threshold in dBm.
      *
      * It is recommended that this value is set to same value as the CCA threshold used by radio.
-     *
      */
     static constexpr int8_t kRssiThreshold = OPENTHREAD_CONFIG_CHANNEL_MONITOR_RSSI_THRESHOLD;
 
     /**
      * The averaging sample window length (in units of sample interval).
-     *
      */
     static constexpr uint32_t kSampleWindow = OPENTHREAD_CONFIG_CHANNEL_MONITOR_SAMPLE_WINDOW;
 
     /**
-     * This constructor initializes the object.
+     * Initializes the object.
      *
      * @param[in]  aInstance     A reference to the OpenThread instance.
-     *
      */
     explicit ChannelMonitor(Instance &aInstance);
 
     /**
-     * This method starts the Channel Monitoring operation.
+     * Starts the Channel Monitoring operation.
      *
      * Once started, any previously collected data is cleared.
      *
      * @retval kErrorNone      Channel Monitoring started successfully.
      * @retval kErrorAlready   Channel Monitoring has already been started.
-     *
      */
     Error Start(void);
 
     /**
-     * This method stops the Channel Monitoring operation.
+     * Stops the Channel Monitoring operation.
      *
      * @note After `Stop()`, the previous data is still valid and can be read.
      *
      * @retval kErrorNone      Channel Monitoring stopped successfully.
      * @retval kErrorAlready   Channel Monitoring has already been stopped.
-     *
      */
     Error Stop(void);
 
     /**
-     * This method indicates whether the Channel Monitoring operation is started and running.
+     * Indicates whether the Channel Monitoring operation is started and running.
      *
      * @returns TRUE if the Channel Monitoring operation is running, FALSE otherwise.
-     *
      */
     bool IsRunning(void) const { return mTimer.IsRunning(); }
 
     /**
-     * This method clears all currently stored data.
-     *
+     * Clears all currently stored data.
      */
     void Clear(void);
 
     /**
-     * This method returns the total number of RSSI samples (per channel) taken so far (since call to `Start()`).
+     * Returns the total number of RSSI samples (per channel) taken so far (since call to `Start()`).
      *
      * @returns total number of RSSI sample taken since last call to `Start()`.
-     *
      */
     uint32_t GetSampleCount(void) const { return mSampleCount; }
 
     /**
-     * This method returns the current channel occupancy for a given channel.
+     * Returns the current channel occupancy for a given channel.
      *
      * The channel occupancy represents the average rate/percentage of RSSI samples that were above RSSI threshold
      * `kRssiThreshold` ("bad" RSSI samples).
@@ -163,12 +153,11 @@ public:
      * @param[in]  aChannel     The channel for which to get the link occupancy.
      *
      * @returns the current channel occupancy for the given channel.
-     *
      */
     uint16_t GetChannelOccupancy(uint8_t aChannel) const;
 
     /**
-     * This method finds the best channel(s) (with least occupancy rate) in a given channel mask.
+     * Finds the best channel(s) (with least occupancy rate) in a given channel mask.
      *
      * The channels are compared based on their occupancy rate from `GetChannelOccupancy()` and lower occupancy rate
      * is considered better.
@@ -178,7 +167,6 @@ public:
      *
      * @returns    A channel mask containing the best channels. A mask is returned in case there are more than one
      *             channel with the same occupancy rate value.
-     *
      */
     Mac::ChannelMask FindBestChannels(const Mac::ChannelMask &aMask, uint16_t &aOccupancy) const;
 
@@ -193,23 +181,23 @@ private:
     static constexpr uint16_t kMaxJitterInterval = 4096;
     static constexpr uint32_t kMaxOccupancy      = 0xffff;
 
-    static void HandleTimer(Timer &aTimer);
     void        HandleTimer(void);
     static void HandleEnergyScanResult(Mac::EnergyScanResult *aResult, void *aContext);
     void        HandleEnergyScanResult(Mac::EnergyScanResult *aResult);
     void        LogResults(void);
 
+    using ScanTimer = TimerMilliIn<ChannelMonitor, &ChannelMonitor::HandleTimer>;
+
     static const uint32_t mScanChannelMasks[kNumChannelMasks];
 
-    uint8_t    mChannelMaskIndex : 3;
-    uint32_t   mSampleCount : 29;
-    uint16_t   mChannelOccupancy[kNumChannels];
-    TimerMilli mTimer;
+    uint8_t   mChannelMaskIndex : 3;
+    uint32_t  mSampleCount : 29;
+    uint16_t  mChannelOccupancy[kNumChannels];
+    ScanTimer mTimer;
 };
 
 /**
  * @}
- *
  */
 
 } // namespace Utils

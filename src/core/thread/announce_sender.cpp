@@ -33,16 +33,7 @@
 
 #include "announce_sender.hpp"
 
-#include <openthread/platform/radio.h>
-
-#include "common/code_utils.hpp"
-#include "common/instance.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/random.hpp"
-#include "meshcop/meshcop.hpp"
-#include "meshcop/meshcop_tlvs.hpp"
-#include "radio/radio.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 
@@ -161,10 +152,7 @@ AnnounceSender::AnnounceSender(Instance &aInstance)
     SetJitter(kMaxJitter);
 }
 
-void AnnounceSender::UpdateOnReceivedAnnounce(void)
-{
-    mTrickleTimer.IndicateConsistent();
-}
+void AnnounceSender::UpdateOnReceivedAnnounce(void) { mTrickleTimer.IndicateConsistent(); }
 
 void AnnounceSender::Stop(void)
 {
@@ -173,15 +161,9 @@ void AnnounceSender::Stop(void)
     LogInfo("Stopped");
 }
 
-void AnnounceSender::HandleTimer(Timer &aTimer)
-{
-    aTimer.Get<AnnounceSender>().AnnounceSenderBase::HandleTimer();
-}
+void AnnounceSender::HandleTimer(Timer &aTimer) { aTimer.Get<AnnounceSender>().AnnounceSenderBase::HandleTimer(); }
 
-void AnnounceSender::HandleTrickleTimer(TrickleTimer &aTimer)
-{
-    aTimer.Get<AnnounceSender>().HandleTrickleTimer();
-}
+void AnnounceSender::HandleTrickleTimer(TrickleTimer &aTimer) { aTimer.Get<AnnounceSender>().HandleTrickleTimer(); }
 
 void AnnounceSender::HandleTrickleTimer(void)
 {
@@ -259,7 +241,7 @@ void AnnounceSender::HandleActiveDatasetChanged(void)
 
     SetChannelMask(channelMask);
     SetPeriod(kTxInterval / channelMask.GetNumberOfChannels());
-    LogInfo("ChannelMask:%s, period:%u", GetChannelMask().ToString().AsCString(), GetPeriod());
+    LogInfo("ChannelMask:%s, period:%lu", GetChannelMask().ToString().AsCString(), ToUlong(GetPeriod()));
 
     // When channel mask is changed, we also check and update the PAN
     // channel. This handles the case where `ThreadChannelChanged` event

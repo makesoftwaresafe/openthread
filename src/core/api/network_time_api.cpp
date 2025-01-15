@@ -37,14 +37,15 @@
 
 #include <openthread/network_time.h>
 
-#include "common/as_core_type.hpp"
-#include "common/locator_getters.hpp"
+#include "instance/instance.hpp"
 
 using namespace ot;
 
 otNetworkTimeStatus otNetworkTimeGet(otInstance *aInstance, uint64_t *aNetworkTime)
 {
-    return AsCoreType(aInstance).Get<TimeSync>().GetTime(*aNetworkTime);
+    AssertPointerIsNotNull(aNetworkTime);
+
+    return MapEnum(AsCoreType(aInstance).Get<TimeSync>().GetTime(*aNetworkTime));
 }
 
 otError otNetworkTimeSetSyncPeriod(otInstance *aInstance, uint16_t aTimeSyncPeriod)

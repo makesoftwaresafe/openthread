@@ -37,15 +37,14 @@
 
 #include <openthread/sntp.h>
 
-#include "common/as_core_type.hpp"
-#include "common/locator_getters.hpp"
+#include "instance/instance.hpp"
 
 using namespace ot;
 
-otError otSntpClientQuery(otInstance *          aInstance,
-                          const otSntpQuery *   aQuery,
+otError otSntpClientQuery(otInstance           *aInstance,
+                          const otSntpQuery    *aQuery,
                           otSntpResponseHandler aHandler,
-                          void *                aContext)
+                          void                 *aContext)
 {
     return AsCoreType(aInstance).Get<Sntp::Client>().Query(aQuery, aHandler, aContext);
 }

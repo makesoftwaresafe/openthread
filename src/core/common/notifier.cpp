@@ -33,12 +33,7 @@
 
 #include "notifier.hpp"
 
-#include "border_router/routing_manager.hpp"
-#include "common/array.hpp"
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 
@@ -46,61 +41,29 @@ RegisterLogModule("Notifier");
 
 Notifier::Notifier(Instance &aInstance)
     : InstanceLocator(aInstance)
-    , mTask(aInstance, Notifier::EmitEvents)
+    , mTask(aInstance)
 {
-    for (ExternalCallback &callback : mExternalCallbacks)
-    {
-        callback.mHandler = nullptr;
-        callback.mContext = nullptr;
-    }
 }
 
-Error Notifier::RegisterCallback(otStateChangedCallback aCallback, void *aContext)
+Error Notifier::RegisterCallback(StateChangedCallback aCallback, void *aContext)
 {
-    Error             error          = kErrorNone;
-    ExternalCallback *unusedCallback = nullptr;
+    Error            error = kErrorNone;
+    ExternalCallback newCallback;
 
-    VerifyOrExit(aCallback != nullptr);
-
-    for (ExternalCallback &callback : mExternalCallbacks)
-    {
-        if (callback.mHandler == nullptr)
-        {
-            if (unusedCallback == nullptr)
-            {
-                unusedCallback = &callback;
-            }
-
-            continue;
-        }
-
-        VerifyOrExit((callback.mHandler != aCallback) || (callback.mContext != aContext), error = kErrorAlready);
-    }
-
-    VerifyOrExit(unusedCallback != nullptr, error = kErrorNoBufs);
-
-    unusedCallback->mHandler = aCallback;
-    unusedCallback->mContext = aContext;
+    newCallback.Set(aCallback, aContext);
+    VerifyOrExit(!mExternalCallbacks.Contains(newCallback), error = kErrorAlready);
+    error = mExternalCallbacks.PushBack(newCallback);
 
 exit:
     return error;
 }
 
-void Notifier::RemoveCallback(otStateChangedCallback aCallback, void *aContext)
+void Notifier::RemoveCallback(StateChangedCallback aCallback, void *aContext)
 {
-    VerifyOrExit(aCallback != nullptr);
+    ExternalCallback callbackToRemove;
 
-    for (ExternalCallback &callback : mExternalCallbacks)
-    {
-        if ((callback.mHandler == aCallback) && (callback.mContext == aContext))
-        {
-            callback.mHandler = nullptr;
-            callback.mContext = nullptr;
-        }
-    }
-
-exit:
-    return;
+    callbackToRemove.Set(aCallback, aContext);
+    mExternalCallbacks.Remove(callbackToRemove);
 }
 
 void Notifier::Signal(Event aEvent)
@@ -116,11 +79,6 @@ void Notifier::SignalIfFirst(Event aEvent)
     {
         Signal(aEvent);
     }
-}
-
-void Notifier::EmitEvents(Tasklet &aTasklet)
-{
-    aTasklet.Get<Notifier>().EmitEvents();
 }
 
 void Notifier::EmitEvents(void)
@@ -146,9 +104,7 @@ void Notifier::EmitEvents(void)
 #if OPENTHREAD_CONFIG_BACKBONE_ROUTER_ENABLE
     Get<BackboneRouter::Manager>().HandleNotifierEvents(events);
 #endif
-#if OPENTHREAD_CONFIG_CHILD_SUPERVISION_ENABLE
-    Get<Utils::ChildSupervisor>().HandleNotifierEvents(events);
-#endif
+    Get<ChildSupervisor>().HandleNotifierEvents(events);
 #if OPENTHREAD_CONFIG_DATASET_UPDATER_ENABLE || OPENTHREAD_CONFIG_CHANNEL_MANAGER_ENABLE
     Get<MeshCoP::DatasetUpdater>().HandleNotifierEvents(events);
 #endif
@@ -201,13 +157,13 @@ void Notifier::EmitEvents(void)
     // being published (if needed).
     Get<NetworkData::Publisher>().HandleNotifierEvents(events);
 #endif
+#if OPENTHREAD_CONFIG_LINK_METRICS_MANAGER_ENABLE
+    Get<Utils::LinkMetricsManager>().HandleNotifierEvents(events);
+#endif
 
     for (ExternalCallback &callback : mExternalCallbacks)
     {
-        if (callback.mHandler != nullptr)
-        {
-            callback.mHandler(events.GetAsFlags(), callback.mContext);
-        }
+        callback.InvokeIfSet(events.GetAsFlags());
     }
 
 exit:
@@ -225,7 +181,7 @@ void Notifier::LogEvents(Events aEvents) const
     bool                           didLog   = false;
     String<kFlagsStringBufferSize> string;
 
-    for (uint8_t bit = 0; bit < sizeof(Events::Flags) * CHAR_BIT; bit++)
+    for (uint8_t bit = 0; bit < BitSizeOf(Events::Flags); bit++)
     {
         VerifyOrExit(flags != 0);
 
@@ -233,7 +189,7 @@ void Notifier::LogEvents(Events aEvents) const
         {
             if (string.GetLength() >= kFlagsStringLineLimit)
             {
-                LogInfo("StateChanged (0x%08x) %s%s ...", aEvents.GetAsFlags(), didLog ? "... " : "[",
+                LogInfo("StateChanged (0x%08lx) %s%s ...", ToUlong(aEvents.GetAsFlags()), didLog ? "... " : "[",
                         string.AsCString());
                 string.Clear();
                 didLog   = true;
@@ -248,7 +204,7 @@ void Notifier::LogEvents(Events aEvents) const
     }
 
 exit:
-    LogInfo("StateChanged (0x%08x) %s%s]", aEvents.GetAsFlags(), didLog ? "... " : "[", string.AsCString());
+    LogInfo("StateChanged (0x%08lx) %s%s]", ToUlong(aEvents.GetAsFlags()), didLog ? "... " : "[", string.AsCString());
 }
 
 const char *Notifier::EventToString(Event aEvent) const
@@ -289,6 +245,8 @@ const char *Notifier::EventToString(Event aEvent) const
         "JoinerState",       // kEventJoinerStateChanged               (1 << 27)
         "ActDset",           // kEventActiveDatasetChanged             (1 << 28)
         "PndDset",           // kEventPendingDatasetChanged            (1 << 29)
+        "Nat64",             // kEventNat64TranslatorStateChanged      (1 << 30)
+        "ParentLq",          // kEventParentLinkQualityChanged         (1 << 31)
     };
 
     for (uint8_t index = 0; index < GetArrayLength(kEventStrings); index++)
@@ -305,14 +263,9 @@ const char *Notifier::EventToString(Event aEvent) const
 
 #else // #if OT_SHOULD_LOG_AT( OT_LOG_LEVEL_INFO)
 
-void Notifier::LogEvents(Events) const
-{
-}
+void Notifier::LogEvents(Events) const {}
 
-const char *Notifier::EventToString(Event) const
-{
-    return "";
-}
+const char *Notifier::EventToString(Event) const { return ""; }
 
 #endif // #if OT_SHOULD_LOG_AT( OT_LOG_LEVEL_INFO)
 

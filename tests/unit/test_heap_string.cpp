@@ -86,7 +86,7 @@ void TestHeapString(void)
 {
     Heap::String str1;
     Heap::String str2;
-    const char * oldBuffer;
+    const char  *oldBuffer;
 
     printf("====================================================================================\n");
     printf("TestHeapString\n\n");
@@ -150,10 +150,7 @@ void TestHeapString(void)
     printf("\n -- PASS\n");
 }
 
-void PrintData(const Heap::Data &aData)
-{
-    DumpBuffer("data", aData.GetBytes(), aData.GetLength());
-}
+void PrintData(const Heap::Data &aData) { DumpBuffer("data", aData.GetBytes(), aData.GetLength()); }
 
 static const uint8_t kTestValue = 0x77;
 
@@ -174,11 +171,15 @@ void VerifyData(const Heap::Data &aData, const uint8_t *aBytes, uint16_t aLength
 
     PrintData(aData);
 
+    VerifyOrQuit(aData.Matches(aBytes, aLength));
+    VerifyOrQuit(!aData.Matches(aBytes, aLength + 1));
+
     if (aLength == 0)
     {
         VerifyOrQuit(aData.IsNull());
         VerifyOrQuit(aData.GetBytes() == nullptr);
         VerifyOrQuit(aData.GetLength() == 0);
+        VerifyOrQuit(aData.Matches(nullptr, 0));
     }
     else
     {
@@ -189,6 +190,10 @@ void VerifyData(const Heap::Data &aData, const uint8_t *aBytes, uint16_t aLength
 
         aData.CopyBytesTo(buffer);
         VerifyOrQuit(memcmp(buffer, aBytes, aLength) == 0, "CopyBytesTo() failed");
+
+        VerifyOrQuit(aData.Matches(buffer, aLength));
+        buffer[aLength - 1]++;
+        VerifyOrQuit(!aData.Matches(buffer, aLength));
     }
 }
 
@@ -199,9 +204,9 @@ template <uint16_t kLength> void VerifyData(const Heap::Data &aData, const uint8
 
 void TestHeapData(void)
 {
-    Instance *     instance;
-    MessagePool *  messagePool;
-    Message *      message;
+    Instance      *instance;
+    MessagePool   *messagePool;
+    Message       *message;
     Heap::Data     data;
     uint16_t       offset;
     const uint8_t *oldBuffer;
@@ -225,6 +230,10 @@ void TestHeapData(void)
     printf("------------------------------------------------------------------------------------\n");
     printf("After constructor\n");
     VerifyData(data, nullptr, 0);
+
+    VerifyOrQuit(data.Matches(nullptr, 0));
+    VerifyOrQuit(data.Matches(kData1, 0));
+    VerifyOrQuit(!data.Matches(kData1, 1));
 
     printf("------------------------------------------------------------------------------------\n");
     printf("SetFrom(aBuffer, aLength)\n");

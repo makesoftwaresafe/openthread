@@ -35,10 +35,7 @@
 
 #if OPENTHREAD_CONFIG_CHANNEL_MONITOR_ENABLE
 
-#include "common/code_utils.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/random.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 namespace Utils {
@@ -64,9 +61,9 @@ ChannelMonitor::ChannelMonitor(Instance &aInstance)
     : InstanceLocator(aInstance)
     , mChannelMaskIndex(0)
     , mSampleCount(0)
-    , mTimer(aInstance, ChannelMonitor::HandleTimer)
+    , mTimer(aInstance)
 {
-    memset(mChannelOccupancy, 0, sizeof(mChannelOccupancy));
+    ClearAllBytes(mChannelOccupancy);
 }
 
 Error ChannelMonitor::Start(void)
@@ -98,7 +95,7 @@ void ChannelMonitor::Clear(void)
 {
     mChannelMaskIndex = 0;
     mSampleCount      = 0;
-    memset(mChannelOccupancy, 0, sizeof(mChannelOccupancy));
+    ClearAllBytes(mChannelOccupancy);
 
     LogDebg("Clearing data");
 }
@@ -112,11 +109,6 @@ uint16_t ChannelMonitor::GetChannelOccupancy(uint8_t aChannel) const
 
 exit:
     return occupancy;
-}
-
-void ChannelMonitor::HandleTimer(Timer &aTimer)
-{
-    aTimer.Get<ChannelMonitor>().HandleTimer();
 }
 
 void ChannelMonitor::HandleTimer(void)
@@ -158,7 +150,7 @@ void ChannelMonitor::HandleEnergyScanResult(Mac::EnergyScanResult *aResult)
 
         LogDebg("channel: %d, rssi:%d", aResult->mChannel, aResult->mMaxRssi);
 
-        if (aResult->mMaxRssi != OT_RADIO_RSSI_INVALID)
+        if (aResult->mMaxRssi != Radio::kInvalidRssi)
         {
             newValue = (aResult->mMaxRssi >= kRssiThreshold) ? kMaxOccupancy : 0;
         }
@@ -200,7 +192,7 @@ void ChannelMonitor::LogResults(void)
         logString.Append("%02x ", channel >> 8);
     }
 
-    LogInfo("%u [%s]", mSampleCount, logString.AsCString());
+    LogInfo("%lu [%s]", ToUlong(mSampleCount), logString.AsCString());
 #endif
 }
 

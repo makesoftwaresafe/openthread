@@ -46,6 +46,12 @@ import weakref
 JOIN_TYPE_ROUTER = 'router'
 JOIN_TYPE_END_DEVICE = 'ed'
 JOIN_TYPE_SLEEPY_END_DEVICE = 'sed'
+JOIN_TYPE_REED = 'reed'
+
+# for use as `radios` parameter in `Node.__init__()`
+RADIO_15_4 = "-15.4"
+RADIO_TREL = "-trel"
+RADIO_15_4_TREL = "-15.4-trel"
 
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -106,26 +112,28 @@ class Node(object):
 
     _all_nodes = weakref.WeakSet()
 
-    def __init__(self, verbose=_VERBOSE):
+    def __init__(self, radios='', index=None, verbose=_VERBOSE):
         """Creates a new `Node` instance"""
 
-        index = Node._cur_index
-        Node._cur_index += 1
+        if index is None:
+            index = Node._cur_index
+            Node._cur_index += 1
 
         self._index = index
         self._verbose = verbose
 
-        if Node._SAVE_LOGS:
-            self._log_file = open(self._LOG_FNAME + str(index) + '.log', 'wb')
-        else:
-            self._log_file = None
+        cmd = f'{self._OT_CLI_FTD}{radios} --time-speed={self._SPEED_UP_FACTOR} '
 
-        cmd = f'{self._OT_CLI_FTD} --time-speed={self._SPEED_UP_FACTOR} {self._index}'
+        if Node._SAVE_LOGS:
+            log_file_name = self._LOG_FNAME + str(index) + '.log'
+            cmd = cmd + f'--log-file={log_file_name} '
+
+        cmd = cmd + f'{self._index}'
 
         if self._verbose:
             _log(f'$ Node{index}.__init__() cmd: `{cmd}`')
 
-        self._cli_process = pexpect.popen_spawn.PopenSpawn(cmd, logfile=self._log_file)
+        self._cli_process = pexpect.popen_spawn.PopenSpawn(cmd)
         Node._all_nodes.add(self)
 
     def __del__(self):
@@ -187,8 +195,8 @@ class Node(object):
         outputs = self.cli(cmd, *args)
         verify(len(outputs) == 0)
 
-    def _cli_single_output(self, cmd, expected_outputs=None):
-        outputs = self.cli(cmd)
+    def _cli_single_output(self, cmd, *args, expected_outputs=None):
+        outputs = self.cli(cmd, *args)
         verify(len(outputs) == 1)
         verify((expected_outputs is None) or (outputs[0] in expected_outputs))
         return outputs[0]
@@ -204,13 +212,27 @@ class Node(object):
     # cli commands
 
     def get_state(self):
-        return self._cli_single_output('state', ['detached', 'child', 'router', 'leader', 'disabled'])
+        return self._cli_single_output('state', expected_outputs=['detached', 'child', 'router', 'leader', 'disabled'])
+
+    def get_version(self):
+        return self._cli_single_output('version')
 
     def get_channel(self):
         return self._cli_single_output('channel')
 
     def set_channel(self, channel):
         self._cli_no_output('channel', channel)
+
+    def get_csl_config(self):
+        outputs = self.cli('csl')
+        result = {}
+        for line in outputs:
+            fields = line.split(':')
+            result[fields[0].strip()] = fields[1].strip()
+        return result
+
+    def set_csl_period(self, period):
+        self._cli_no_output('csl period', period)
 
     def get_ext_addr(self):
         return self._cli_single_output('extaddr')
@@ -260,6 +282,18 @@ class Node(object):
     def set_router_selection_jitter(self, jitter):
         self._cli_no_output('routerselectionjitter', jitter)
 
+    def get_router_eligible(self):
+        return self._cli_single_output('routereligible')
+
+    def set_router_eligible(self, enable):
+        self._cli_no_output('routereligible', enable)
+
+    def get_context_reuse_delay(self):
+        return self._cli_single_output('contextreusedelay')
+
+    def set_context_reuse_delay(self, delay):
+        self._cli_no_output('contextreusedelay', delay)
+
     def interface_up(self):
         self._cli_no_output('ifconfig up')
 
@@ -275,8 +309,20 @@ class Node(object):
     def thread_stop(self):
         self._cli_no_output('thread stop')
 
-    def get_ip_addrs(self):
-        return self.cli('ipaddr')
+    def get_rloc16(self):
+        return self._cli_single_output('rloc16')
+
+    def get_mac_alt_short_addr(self):
+        return self._cli_single_output('mac altshortaddr')
+
+    def get_ip_addrs(self, verbose=None):
+        return self.cli('ipaddr', verbose)
+
+    def add_ip_addr(self, address):
+        self._cli_no_output('ipaddr add', address)
+
+    def remove_ip_addr(self, address):
+        self._cli_no_output('ipaddr del', address)
 
     def get_mleid_ip_addr(self):
         return self._cli_single_output('ipaddr mleid')
@@ -286,6 +332,237 @@ class Node(object):
 
     def get_rloc_ip_addr(self):
         return self._cli_single_output('ipaddr rloc')
+
+    def get_mesh_local_prefix(self):
+        return self._cli_single_output('prefix meshlocal')
+
+    def get_ip_maddrs(self):
+        return self.cli('ipmaddr')
+
+    def add_ip_maddr(self, maddr):
+        return self._cli_no_output('ipmaddr add', maddr)
+
+    def get_leader_weight(self):
+        return self._cli_single_output('leaderweight')
+
+    def set_leader_weight(self, weight):
+        self._cli_no_output('leaderweight', weight)
+
+    def get_pollperiod(self):
+        return self._cli_single_output('pollperiod')
+
+    def set_pollperiod(self, period):
+        self._cli_no_output('pollperiod', period)
+
+    def get_child_timeout(self):
+        return self._cli_single_output('childtimeout')
+
+    def set_child_timeout(self, timeout):
+        self._cli_no_output('childtimeout', timeout)
+
+    def get_partition_id(self):
+        return self._cli_single_output('partitionid')
+
+    def get_nexthop(self, rloc16):
+        return self._cli_single_output('nexthop', rloc16)
+
+    def get_child_max(self):
+        return self._cli_single_output('childmax')
+
+    def set_child_max(self, childmax):
+        self._cli_no_output('childmax', childmax)
+
+    def get_parent_info(self):
+        outputs = self.cli('parent')
+        result = {}
+        for line in outputs:
+            fields = line.split(':')
+            result[fields[0].strip()] = fields[1].strip()
+        return result
+
+    def get_child_table(self):
+        return Node.parse_table(self.cli('child table'))
+
+    def get_child_ip(self):
+        return self.cli('childip')
+
+    def get_neighbor_table(self):
+        return Node.parse_table(self.cli('neighbor table'))
+
+    def get_router_table(self):
+        return Node.parse_table(self.cli('router table'))
+
+    def get_eidcache(self):
+        return self.cli('eidcache')
+
+    def get_vendor_name(self):
+        return self._cli_single_output('vendor name')
+
+    def set_vendor_name(self, name):
+        self._cli_no_output('vendor name', name)
+
+    def get_vendor_model(self):
+        return self._cli_single_output('vendor model')
+
+    def set_vendor_model(self, model):
+        self._cli_no_output('vendor model', model)
+
+    def get_vendor_sw_version(self):
+        return self._cli_single_output('vendor swversion')
+
+    def set_vendor_sw_version(self, version):
+        return self._cli_no_output('vendor swversion', version)
+
+    def get_vendor_app_url(self):
+        return self._cli_single_output('vendor appurl')
+
+    def set_vendor_app_url(self, url):
+        return self._cli_no_output('vendor appurl', url)
+
+    #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # netdata
+
+    def get_netdata(self, rloc16=None):
+        outputs = self.cli('netdata show', rloc16)
+        outputs = [line.strip() for line in outputs]
+        routes_index = outputs.index('Routes:')
+        services_index = outputs.index('Services:')
+        if rloc16 is None:
+            contexts_index = outputs.index('Contexts:')
+            commissioning_index = outputs.index('Commissioning:')
+        result = {}
+        result['prefixes'] = outputs[1:routes_index]
+        result['routes'] = outputs[routes_index + 1:services_index]
+        if rloc16 is None:
+            result['services'] = outputs[services_index + 1:contexts_index]
+            result['contexts'] = outputs[contexts_index + 1:commissioning_index]
+            result['commissioning'] = outputs[commissioning_index + 1:]
+        else:
+            result['services'] = outputs[services_index + 1:]
+
+        return result
+
+    def get_netdata_prefixes(self):
+        return self.get_netdata()['prefixes']
+
+    def get_netdata_routes(self):
+        return self.get_netdata()['routes']
+
+    def get_netdata_services(self):
+        return self.get_netdata()['services']
+
+    def get_netdata_contexts(self):
+        return self.get_netdata()['contexts']
+
+    def get_netdata_versions(self):
+        leaderdata = Node.parse_list(self.cli('leaderdata'))
+        return (int(leaderdata['Data Version']), int(leaderdata['Stable Data Version']))
+
+    def get_netdata_length(self):
+        return self._cli_single_output('netdata length')
+
+    def add_prefix(self, prefix, flags=None, prf=None):
+        return self._cli_no_output('prefix add', prefix, flags, prf)
+
+    def add_route(self, prefix, flags=None, prf=None):
+        return self._cli_no_output('route add', prefix, flags, prf)
+
+    def remove_prefix(self, prefix):
+        return self._cli_no_output('prefix remove', prefix)
+
+    def register_netdata(self):
+        self._cli_no_output('netdata register')
+
+    def get_netdata_full(self):
+        return self._cli_single_output('netdata full')
+
+    def reset_netdata_full(self):
+        self._cli_no_output('netdata full reset')
+
+    #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # ping and counters
+
+    def ping(self, address, size=0, count=1, verify_success=True):
+        outputs = self.cli('ping', address, size, count)
+        m = re.match(r'(\d+) packets transmitted, (\d+) packets received.', outputs[-1].strip())
+        verify(m is not None)
+        verify(int(m.group(1)) == count)
+        if verify_success:
+            verify(int(m.group(2)) == count)
+
+    def get_mle_counter(self):
+        return self.cli('counters mle')
+
+    def get_ip_counters(self):
+        return Node.parse_list(self.cli('counters ip'))
+
+    def get_mac_counters(self):
+        return Node.parse_list(self.cli('counters mac'))
+
+    def get_br_counter_unicast_outbound_packets(self):
+        outputs = self.cli('counters br')
+        for line in outputs:
+            m = re.match(r'Outbound Unicast: Packets (\d+) Bytes (\d+)', line.strip())
+            if m is not None:
+                counter = int(m.group(1))
+                break
+        else:
+            verify(False)
+        return counter
+
+    #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # Misc
+
+    def get_mle_adv_imax(self):
+        return self._cli_single_output('mleadvimax')
+
+    #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # Border Agent
+
+    def ba_get_state(self):
+        return self._cli_single_output('ba state')
+
+    def ba_get_port(self):
+        return self._cli_single_output('ba port')
+
+    def ba_is_ephemeral_key_feature_enabled(self):
+        return self._cli_single_output('ba ephemeralkey feature')
+
+    def ba_set_ephemeral_key_feature_enabled(self, enable):
+        self._cli_no_output('ba ephemeralkey feature', 'enable' if enable else 'disable')
+
+    def ba_is_ephemeral_key_active(self):
+        return self._cli_single_output('ba ephemeralkey')
+
+    def ba_set_ephemeral_key(self, keystring, timeout=None, port=None):
+        self._cli_no_output('ba ephemeralkey set', keystring, timeout, port)
+
+    def ba_clear_ephemeral_key(self):
+        self._cli_no_output('ba ephemeralkey clear')
+
+    #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # UDP
+
+    def udp_open(self):
+        self._cli_no_output('udp open')
+
+    def udp_close(self):
+        self._cli_no_output('udp close')
+
+    def udp_bind(self, address, port):
+        self._cli_no_output('udp bind', address, port)
+
+    def udp_send(self, address, port, text):
+        self._cli_no_output('udp send', address, port, '-t', text)
+
+    #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # multiradio
+
+    def multiradio_get_radios(self):
+        return self._cli_single_output('multiradio')
+
+    def multiradio_get_neighbor_list(self):
+        return self.cli('multiradio neighbor list')
 
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # SRP client
@@ -297,10 +574,10 @@ class Node(object):
         self._cli_no_output('srp client stop')
 
     def srp_client_get_state(self):
-        return self._cli_single_output('srp client state', ['Enabled', 'Disabled'])
+        return self._cli_single_output('srp client state', expected_outputs=['Enabled', 'Disabled'])
 
     def srp_client_get_auto_start_mode(self):
-        return self._cli_single_output('srp client autostart', ['Enabled', 'Disabled'])
+        return self._cli_single_output('srp client autostart', expected_outputs=['Enabled', 'Disabled'])
 
     def srp_client_enable_auto_start_mode(self):
         self._cli_no_output('srp client autostart enable')
@@ -338,9 +615,18 @@ class Node(object):
     def srp_client_get_host_address(self):
         return self.cli('srp client host address')
 
-    def srp_client_add_service(self, instance_name, service_name, port, priority=0, weight=0, txt_entries=[]):
+    def srp_client_add_service(self,
+                               instance_name,
+                               service_name,
+                               port,
+                               priority=0,
+                               weight=0,
+                               txt_entries=[],
+                               lease=0,
+                               key_lease=0):
         txt_record = "".join(self._encode_txt_entry(entry) for entry in txt_entries)
-        self._cli_no_output('srp client service add', instance_name, service_name, port, priority, weight, txt_record)
+        self._cli_no_output('srp client service add', instance_name, service_name, port, priority, weight, txt_record,
+                            lease, key_lease)
 
     def srp_client_remove_service(self, instance_name, service_name):
         self._cli_no_output('srp client service remove', instance_name, service_name)
@@ -387,10 +673,10 @@ class Node(object):
     # SRP server
 
     def srp_server_get_state(self):
-        return self._cli_single_output('srp server state', ['disabled', 'running', 'stopped'])
+        return self._cli_single_output('srp server state', expected_outputs=['disabled', 'running', 'stopped'])
 
     def srp_server_get_addr_mode(self):
-        return self._cli_single_output('srp server addrmode', ['unicast', 'anycast'])
+        return self._cli_single_output('srp server addrmode', expected_outputs=['unicast', 'anycast'])
 
     def srp_server_set_addr_mode(self, mode):
         self._cli_no_output('srp server addrmode', mode)
@@ -406,6 +692,12 @@ class Node(object):
 
     def srp_server_disable(self):
         self._cli_no_output('srp server disable')
+
+    def srp_server_auto_enable(self):
+        self._cli_no_output('srp server auto enable')
+
+    def srp_server_auto_disable(self):
+        self._cli_no_output('srp server auto disable')
 
     def srp_server_set_lease(self, min_lease, max_lease, min_key_lease, max_key_lease):
         self._cli_no_output('srp server lease', min_lease, max_lease, min_key_lease, max_key_lease)
@@ -462,6 +754,8 @@ class Node(object):
                'priority': '0',
                'weight': '0',
                'ttl': '7200',
+               'lease': '7200',
+               'key-lease', '1209600',
                'TXT': ['abc=010203'],
                'host_fullname': 'my-host.default.service.arpa.',
                'host': 'my-host',
@@ -482,8 +776,8 @@ class Node(object):
             if service['deleted'] == 'true':
                 service_list.append(service)
                 continue
-            # 'subtypes', port', 'priority', 'weight', 'ttl'
-            for i in range(0, 5):
+            # 'subtypes', port', 'priority', 'weight', 'ttl', 'lease', 'key-lease'
+            for i in range(0, 7):
                 key_value = outputs.pop(0).strip().split(':')
                 service[key_value[0].strip()] = key_value[1].strip()
             txt_entries = outputs.pop(0).strip().split('[')[1].strip(' ]').split(',')
@@ -508,32 +802,107 @@ class Node(object):
             if (instance_name == service['instance'] and service_name == service['name']):
                 return service
 
+    #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # br
+
+    def br_init(self, if_inex, is_running):
+        self._cli_no_output('br init', if_inex, is_running)
+
+    def br_enable(self):
+        self._cli_no_output('br enable')
+
+    def br_disable(self):
+        self._cli_no_output('br disable')
+
+    def br_get_state(self):
+        return self._cli_single_output('br state')
+
+    def br_get_favored_omrprefix(self):
+        return self._cli_single_output('br omrprefix favored')
+
+    def br_get_local_omrprefix(self):
+        return self._cli_single_output('br omrprefix local')
+
+    def br_get_favored_onlinkprefix(self):
+        return self._cli_single_output('br onlinkprefix favored')
+
+    def br_get_local_onlinkprefix(self):
+        return self._cli_single_output('br onlinkprefix local')
+
+    def br_set_test_local_onlinkprefix(self, prefix):
+        self._cli_no_output('br onlinkprefix test', prefix)
+
+    def br_get_routeprf(self):
+        return self._cli_single_output('br routeprf')
+
+    def br_set_routeprf(self, prf):
+        self._cli_no_output('br routeprf', prf)
+
+    def br_clear_routeprf(self):
+        self._cli_no_output('br routeprf clear')
+
+    def br_get_routers(self):
+        return self.cli('br routers')
+
+    def br_get_peer_brs(self):
+        return self.cli('br peers')
+
+    def br_count_peers(self):
+        return self._cli_single_output('br peers count')
+
+    #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # trel
+
+    def trel_get_peers(self):
+        peers = self.cli('trel peers ')
+        return Node.parse_table(peers)
+
+    def trel_test_get_sock_addr(self):
+        return self._cli_single_output('treltest sockaddr')
+
+    def trel_test_change_sock_addr(self):
+        return self._cli_no_output('treltest changesockaddr')
+
+    def trel_test_change_sock_port(self):
+        return self._cli_no_output('treltest changesockport')
+
+    def trel_test_get_notify_addr_counter(self):
+        return self._cli_single_output('treltest notifyaddrcounter')
+
     # ------------------------------------------------------------------------------------------------------------------
     # Helper methods
 
     def form(self, network_name=None, network_key=None, channel=None, panid=0x1234, xpanid=None):
+        self._cli_no_output('dataset init new')
+        self._cli_no_output('dataset panid', panid)
         if network_name is not None:
-            self.set_network_name(network_name)
+            self._cli_no_output('dataset networkname', network_name)
         if network_key is not None:
-            self.set_network_key(network_key)
+            self._cli_no_output('dataset networkkey', network_key)
         if channel is not None:
-            self.set_channel(channel)
+            self._cli_no_output('dataset channel', channel)
         if xpanid is not None:
-            self.set_ext_panid(xpanid)
-        self.set_panid(panid)
+            self._cli_no_output('dataset extpanid', xpanid)
+        self._cli_no_output('dataset commit active')
+        self.set_mode('rdn')
         self.interface_up()
         self.thread_start()
         verify_within(_check_node_is_leader, self._WAIT_TIME, arg=self)
 
     def join(self, node, type=JOIN_TYPE_ROUTER):
-        self.set_network_name(node.get_network_name())
-        self.set_network_key(node.get_network_key())
-        self.set_channel(node.get_channel())
-        self.set_panid(node.get_panid())
+        self._cli_no_output('dataset clear')
+        self._cli_no_output('dataset networkname', node.get_network_name())
+        self._cli_no_output('dataset networkkey', node.get_network_key())
+        self._cli_no_output('dataset channel', node.get_channel())
+        self._cli_no_output('dataset panid', node.get_panid())
+        self._cli_no_output('dataset commit active')
         if type == JOIN_TYPE_END_DEVICE:
             self.set_mode('rn')
         elif type == JOIN_TYPE_SLEEPY_END_DEVICE:
             self.set_mode('-')
+        elif type == JOIN_TYPE_REED:
+            self.set_mode('rdn')
+            self.set_router_eligible('disable')
         else:
             self.set_mode('rdn')
             self.set_router_selection_jitter(1)
@@ -552,6 +921,73 @@ class Node(object):
     def un_allowlist_node(self, node):
         """Removes a given node (of node `Node) from the allowlist"""
         self._cli_no_output('macfilter addr remove', node.get_ext_addr())
+
+    def denylist_node(self, node):
+        """Adds a given node to the denylist of `self` and enables denylisting on `self`"""
+        self._cli_no_output('macfilter addr add', node.get_ext_addr())
+        self._cli_no_output('macfilter addr denylist')
+
+    def un_denylist_node(self, node):
+        """Removes a given node (of node `Node) from the denylist"""
+        self._cli_no_output('macfilter addr remove', node.get_ext_addr())
+
+    def set_macfilter_lqi_to_node(self, node, lqi):
+        self._cli_no_output('macfilter rss add-lqi', node.get_ext_addr(), lqi)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Radio nodeidfilter
+
+    def nodeidfilter_clear(self, node):
+        self._cli_no_output('nodeidfilter clear')
+
+    def nodeidfilter_allow(self, node):
+        self._cli_no_output('nodeidfilter allow', node.index)
+
+    def nodeidfilter_deny(self, node):
+        self._cli_no_output('nodeidfilter deny', node.index)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Parsing helpers
+
+    @classmethod
+    def parse_table(cls, table_lines):
+        verify(len(table_lines) >= 2)
+        headers = cls.split_table_row(table_lines[0])
+        info = []
+        for row in table_lines[2:]:
+            if row.strip() == '':
+                continue
+            fields = cls.split_table_row(row)
+            verify(len(fields) == len(headers))
+            info.append({headers[i]: fields[i] for i in range(len(fields))})
+        return info
+
+    @classmethod
+    def split_table_row(cls, row):
+        return [field.strip() for field in row.strip().split('|')[1:-1]]
+
+    @classmethod
+    def parse_list(cls, list_lines):
+        result = {}
+        for line in list_lines:
+            fields = line.split(':', 1)
+            result[fields[0].strip()] = fields[1].strip()
+        return result
+
+    @classmethod
+    def parse_multiradio_neighbor_entry(cls, line):
+        # Example: "ExtAddr:42aa94ad67229f14, RLOC16:0x9400, Radios:[15.4(245), TREL(255)]"
+        result = {}
+        for field in line.split(', ', 2):
+            key_value = field.split(':')
+            result[key_value[0]] = key_value[1]
+        radios = {}
+        for item in result['Radios'][1:-1].split(','):
+            name, prf = item.strip().split('(')
+            verify(prf.endswith(')'))
+            radios[name] = int(prf[:-1])
+        result['Radios'] = radios
+        return result
 
     # ------------------------------------------------------------------------------------------------------------------
     # class methods
@@ -623,7 +1059,8 @@ def verify_within(condition_checker_func, wait_time, arg=None, delay_time=0.1):
         except VerifyError as e:
             if time.time() - start_time > wait_time:
                 print('Took too long to pass the condition ({}>{} sec)'.format(time.time() - start_time, wait_time))
-                print(e.message)
+                if hasattr(e, 'message'):
+                    print(e.message)
                 raise e
         except BaseException:
             raise

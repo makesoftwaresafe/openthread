@@ -38,13 +38,13 @@
 #include <openthread/backbone_router.h>
 
 #include "common/as_core_type.hpp"
-#include "common/locator_getters.hpp"
+#include "instance/instance.hpp"
 
 using namespace ot;
 
 otError otBackboneRouterGetPrimary(otInstance *aInstance, otBackboneRouterConfig *aConfig)
 {
-    OT_ASSERT(aConfig != nullptr);
+    AssertPointerIsNotNull(aConfig);
 
     return AsCoreType(aInstance).Get<BackboneRouter::Leader>().GetConfig(*aConfig);
 }

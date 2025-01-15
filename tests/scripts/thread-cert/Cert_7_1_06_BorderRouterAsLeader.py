@@ -143,7 +143,7 @@ class Cert_7_1_6_BorderRouterAsLeader(thread_cert.TestCase):
         self.simulator.go(720)
 
         self.nodes[ROUTER_1].start()
-        self.simulator.go(config.ROUTER_STARTUP_DELAY)
+        self.simulator.go(config.ROUTER_RESET_DELAY)
         self.assertEqual(self.nodes[ROUTER_1].get_state(), 'router')
         self.collect_rloc16s()
 
@@ -287,7 +287,7 @@ class Cert_7_1_6_BorderRouterAsLeader(thread_cert.TestCase):
                               SOURCE_ADDRESS_TLV,
                               LEADER_DATA_TLV,
                               ACTIVE_TIMESTAMP_TLV
-                             } == set(p.mle.tlv.type) and\
+                             } <= set(p.mle.tlv.type) and\
                    [Ipv6Addr(PREFIX_2001[:-3])] ==
                    p.thread_nwd.tlv.prefix and\
                    p.thread_nwd.tlv.stable == [1, 1, 1] and\
@@ -459,7 +459,7 @@ class Cert_7_1_6_BorderRouterAsLeader(thread_cert.TestCase):
                               SOURCE_ADDRESS_TLV,
                               LEADER_DATA_TLV,
                               ACTIVE_TIMESTAMP_TLV
-                             } == set(p.mle.tlv.type) and\
+                             } <= set(p.mle.tlv.type) and\
                    [Ipv6Addr(PREFIX_2001[:-3])] ==
                    p.thread_nwd.tlv.prefix and\
                    p.mle.tlv.leader_data.data_version  ==

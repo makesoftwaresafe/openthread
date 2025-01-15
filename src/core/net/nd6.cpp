@@ -29,13 +29,13 @@
 /**
  * @file
  *   This file includes implementations for IPv6 Neighbor Discovery (ND6).
- *
  */
 
 #include "nd6.hpp"
 
-#include "common/as_core_type.hpp"
-#include "common/code_utils.hpp"
+#if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+
+#include "instance/instance.hpp"
 
 namespace ot {
 namespace Ip6 {
@@ -66,10 +66,7 @@ const Option *Option::Iterator::Next(const Option *aOption)
     return reinterpret_cast<const Option *>(reinterpret_cast<const uint8_t *>(aOption) + aOption->GetSize());
 }
 
-void Option::Iterator::Advance(void)
-{
-    mOption = (mOption != nullptr) ? Validate(Next(mOption)) : nullptr;
-}
+void Option::Iterator::Advance(void) { mOption = (mOption != nullptr) ? Validate(Next(mOption)) : nullptr; }
 
 const Option *Option::Iterator::Validate(const Option *aOption) const
 {
@@ -99,10 +96,7 @@ void PrefixInfoOption::SetPrefix(const Prefix &aPrefix)
     mPrefix       = AsCoreType(&aPrefix.mPrefix);
 }
 
-void PrefixInfoOption::GetPrefix(Prefix &aPrefix) const
-{
-    aPrefix.Set(mPrefix.GetBytes(), mPrefixLength);
-}
+void PrefixInfoOption::GetPrefix(Prefix &aPrefix) const { aPrefix.Set(mPrefix.GetBytes(), mPrefixLength); }
 
 bool PrefixInfoOption::IsValid(void) const
 {
@@ -137,10 +131,7 @@ void RouteInfoOption::SetPrefix(const Prefix &aPrefix)
     memcpy(GetPrefixBytes(), aPrefix.GetBytes(), aPrefix.GetBytesSize());
 }
 
-void RouteInfoOption::GetPrefix(Prefix &aPrefix) const
-{
-    aPrefix.Set(GetPrefixBytes(), mPrefixLength);
-}
+void RouteInfoOption::GetPrefix(Prefix &aPrefix) const { aPrefix.Set(GetPrefixBytes(), mPrefixLength); }
 
 bool RouteInfoOption::IsValid(void) const
 {
@@ -180,9 +171,21 @@ uint8_t RouteInfoOption::OptionLengthForPrefix(uint8_t aPrefixLength)
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-// RouterAdverMessage::Header
+// RaFlagsExtOption
 
-void RouterAdvertMessage::Header::SetToDefault(void)
+void RaFlagsExtOption::Init(void)
+{
+    Clear();
+    SetType(kTypeRaFlagsExtension);
+    SetSize(sizeof(RaFlagsExtOption));
+
+    OT_UNUSED_VARIABLE(mFlags);
+}
+
+//----------------------------------------------------------------------------------------------------------------------
+// RouterAdver::Header
+
+void RouterAdvert::Header::SetToDefault(void)
 {
     OT_UNUSED_VARIABLE(mCode);
     OT_UNUSED_VARIABLE(mCurHopLimit);
@@ -193,21 +196,21 @@ void RouterAdvertMessage::Header::SetToDefault(void)
     mType = Icmp::Header::kTypeRouterAdvert;
 }
 
-RoutePreference RouterAdvertMessage::Header::GetDefaultRouterPreference(void) const
+RoutePreference RouterAdvert::Header::GetDefaultRouterPreference(void) const
 {
     return NetworkData::RoutePreferenceFromValue((mFlags & kPreferenceMask) >> kPreferenceOffset);
 }
 
-void RouterAdvertMessage::Header::SetDefaultRouterPreference(RoutePreference aPreference)
+void RouterAdvert::Header::SetDefaultRouterPreference(RoutePreference aPreference)
 {
     mFlags &= ~kPreferenceMask;
     mFlags |= (NetworkData::RoutePreferenceToValue(aPreference) << kPreferenceOffset) & kPreferenceMask;
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-// RouterAdverMessage
+// TxMessage
 
-Option *RouterAdvertMessage::AppendOption(uint16_t aOptionSize)
+Option *TxMessage::AppendOption(uint16_t aOptionSize)
 {
     // This method appends an option with a given size to the RA
     // message by reserving space in the data buffer if there is
@@ -215,22 +218,65 @@ Option *RouterAdvertMessage::AppendOption(uint16_t aOptionSize)
     // returns `nullptr`. The returned option needs to be
     // initialized and populated by the caller.
 
-    Option * option    = nullptr;
-    uint32_t newLength = mData.GetLength();
+    Option  *option    = nullptr;
+    uint16_t oldLength = mArray.GetLength();
 
-    newLength += aOptionSize;
-    VerifyOrExit(newLength <= mMaxLength);
-
-    option = reinterpret_cast<Option *>(AsNonConst(GetDataEnd()));
-    mData.SetLength(static_cast<uint16_t>(newLength));
+    SuccessOrExit(AppendBytes(nullptr, aOptionSize));
+    option = reinterpret_cast<Option *>(&mArray[oldLength]);
 
 exit:
     return option;
 }
 
-Error RouterAdvertMessage::AppendPrefixInfoOption(const Prefix &aPrefix,
-                                                  uint32_t      aValidLifetime,
-                                                  uint32_t      aPreferredLifetime)
+Error TxMessage::AppendBytes(const uint8_t *aBytes, uint16_t aLength)
+{
+    Error error = kErrorNone;
+
+    for (; aLength > 0; aLength--)
+    {
+        uint8_t byte;
+
+        byte = (aBytes == nullptr) ? 0 : *aBytes++;
+        SuccessOrExit(error = mArray.PushBack(byte));
+    }
+
+exit:
+    return error;
+}
+
+Error TxMessage::AppendLinkLayerOption(LinkLayerAddress &aLinkLayerAddress, Option::Type aType)
+{
+    Error    error;
+    Option   option;
+    uint16_t size;
+
+    size = sizeof(Option) + aLinkLayerAddress.mLength;
+
+    option.SetType(aType);
+    option.SetSize(size);
+
+    SuccessOrExit(error = Append(option));
+    SuccessOrExit(error = AppendBytes(aLinkLayerAddress.mAddress, aLinkLayerAddress.mLength));
+
+    // `SetSize()` rounds up to ensure the option's size is a multiple
+    // of `kLengthUnit = 8` bytes and ends on a 64-bit boundary. Append
+    // any necessary zero padding bytes.
+
+    for (; size < option.GetSize(); size++)
+    {
+        SuccessOrExit(error = Append<uint8_t>(0));
+    }
+
+exit:
+    return error;
+}
+
+//----------------------------------------------------------------------------------------------------------------------
+// RouterAdver::TxMessage
+
+Error RouterAdvert::TxMessage::AppendPrefixInfoOption(const Prefix &aPrefix,
+                                                      uint32_t      aValidLifetime,
+                                                      uint32_t      aPreferredLifetime)
 {
     Error             error = kErrorNone;
     PrefixInfoOption *pio;
@@ -249,9 +295,9 @@ exit:
     return error;
 }
 
-Error RouterAdvertMessage::AppendRouteInfoOption(const Prefix &  aPrefix,
-                                                 uint32_t        aRouteLifetime,
-                                                 RoutePreference aPreference)
+Error RouterAdvert::TxMessage::AppendRouteInfoOption(const Prefix   &aPrefix,
+                                                     uint32_t        aRouteLifetime,
+                                                     RoutePreference aPreference)
 {
     Error            error = kErrorNone;
     RouteInfoOption *rio;
@@ -269,14 +315,40 @@ exit:
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-// RouterAdvMessage
+// RouterSolicitHeader
 
-RouterSolicitMessage::RouterSolicitMessage(void)
+RouterSolicitHeader::RouterSolicitHeader(void)
 {
     mHeader.Clear();
     mHeader.SetType(Icmp::Header::kTypeRouterSolicit);
 }
 
+//----------------------------------------------------------------------------------------------------------------------
+// NeighborSolicitHeader
+
+NeighborSolicitHeader::NeighborSolicitHeader(void)
+{
+    OT_UNUSED_VARIABLE(mChecksum);
+    OT_UNUSED_VARIABLE(mReserved);
+
+    Clear();
+    mType = Icmp::Header::kTypeNeighborSolicit;
+}
+
+//----------------------------------------------------------------------------------------------------------------------
+// NeighborAdvertMessage
+
+NeighborAdvertMessage::NeighborAdvertMessage(void)
+{
+    OT_UNUSED_VARIABLE(mChecksum);
+    OT_UNUSED_VARIABLE(mReserved);
+
+    Clear();
+    mType = Icmp::Header::kTypeNeighborAdvert;
+}
+
 } // namespace Nd
 } // namespace Ip6
 } // namespace ot
+
+#endif // OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE

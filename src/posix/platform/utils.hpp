@@ -29,20 +29,19 @@
 #ifndef OT_POSIX_PLATFORM_UTILS_HPP_
 #define OT_POSIX_PLATFORM_UTILS_HPP_
 
-#include "openthread/error.h"
+#include <openthread/error.h>
 
 namespace ot {
 namespace Posix {
 
 /**
- * This method formats a system command to execute.
+ * Formats a system command to execute.
  *
  * @param[in] aFormat  A pointer to the format string.
  * @param[in] ...      Arguments for the format specification.
  *
  * @retval OT_ERROR_NONE    The command was executed successfully.
  * @retval OT_ERROR_FAILED  It failed to execute the command.
- *
  */
 otError ExecuteCommand(const char *aFormat, ...);
 

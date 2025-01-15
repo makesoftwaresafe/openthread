@@ -37,8 +37,7 @@
 #include <openthread/platform/alarm-micro.h>
 #include <openthread/platform/alarm-milli.h>
 #include <openthread/platform/diag.h>
-
-#define US_PER_MS 1000
+#include <openthread/platform/time.h>
 
 extern uint64_t sNow; // microseconds
 
@@ -55,20 +54,11 @@ void platformAlarmInit(uint32_t aSpeedUpFactor)
     sNow = 0;
 }
 
-uint64_t platformAlarmGetNow(void)
-{
-    return sNow;
-}
+uint64_t platformAlarmGetNow(void) { return sNow; }
 
-void platformAlarmAdvanceNow(uint64_t aDelta)
-{
-    sNow += aDelta;
-}
+void platformAlarmAdvanceNow(uint64_t aDelta) { sNow += aDelta; }
 
-uint32_t otPlatAlarmMilliGetNow(void)
-{
-    return (uint32_t)(sNow / US_PER_MS);
-}
+uint32_t otPlatAlarmMilliGetNow(void) { return (uint32_t)(sNow / OT_US_PER_MS); }
 
 void otPlatAlarmMilliStartAt(otInstance *aInstance, uint32_t aT0, uint32_t aDt)
 {
@@ -85,10 +75,7 @@ void otPlatAlarmMilliStop(otInstance *aInstance)
     sIsMsRunning = false;
 }
 
-uint32_t otPlatAlarmMicroGetNow(void)
-{
-    return (uint32_t)sNow;
-}
+uint32_t otPlatAlarmMicroGetNow(void) { return (uint32_t)sNow; }
 
 void otPlatAlarmMicroStartAt(otInstance *aInstance, uint32_t aT0, uint32_t aDt)
 {
@@ -120,7 +107,7 @@ uint64_t platformAlarmGetNext(void)
         else
         {
             remaining = (uint64_t)milli;
-            remaining *= US_PER_MS;
+            remaining *= OT_US_PER_MS;
         }
     }
 
@@ -186,16 +173,10 @@ void platformAlarmProcess(otInstance *aInstance)
 #endif // OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE
 }
 
-uint64_t otPlatTimeGet(void)
-{
-    return platformAlarmGetNow();
-}
+uint64_t otPlatTimeGet(void) { return platformAlarmGetNow(); }
 
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
-uint16_t otPlatTimeGetXtalAccuracy(void)
-{
-    return 0;
-}
+uint16_t otPlatTimeGetXtalAccuracy(void) { return 0; }
 #endif
 
 #endif // OPENTHREAD_SIMULATION_VIRTUAL_TIME

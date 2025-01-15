@@ -35,12 +35,7 @@
 
 #if OPENTHREAD_CONFIG_JAM_DETECTION_ENABLE
 
-#include "common/code_utils.hpp"
-#include "common/instance.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/random.hpp"
-#include "thread/thread_netif.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 namespace Utils {
@@ -49,9 +44,7 @@ RegisterLogModule("JamDetector");
 
 JamDetector::JamDetector(Instance &aInstance)
     : InstanceLocator(aInstance)
-    , mHandler(nullptr)
-    , mContext(nullptr)
-    , mTimer(aInstance, JamDetector::HandleTimer)
+    , mTimer(aInstance)
     , mHistoryBitmap(0)
     , mCurSecondStartTime(0)
     , mSampleInterval(0)
@@ -71,8 +64,7 @@ Error JamDetector::Start(Handler aHandler, void *aContext)
     VerifyOrExit(!mEnabled, error = kErrorAlready);
     VerifyOrExit(aHandler != nullptr, error = kErrorInvalidArgs);
 
-    mHandler = aHandler;
-    mContext = aContext;
+    mCallback.Set(aHandler, aContext);
     mEnabled = true;
 
     LogInfo("Started");
@@ -161,11 +153,6 @@ exit:
     return error;
 }
 
-void JamDetector::HandleTimer(Timer &aTimer)
-{
-    aTimer.Get<JamDetector>().HandleTimer();
-}
-
 void JamDetector::HandleTimer(void)
 {
     int8_t rssi;
@@ -177,7 +164,7 @@ void JamDetector::HandleTimer(void)
 
     // If the RSSI is valid, check if it exceeds the threshold
     // and try to update the history bit map
-    if (rssi != OT_RADIO_RSSI_INVALID)
+    if (rssi != Radio::kInvalidRssi)
     {
         didExceedThreshold = (rssi >= mRssiThreshold);
         UpdateHistory(didExceedThreshold);
@@ -268,7 +255,7 @@ void JamDetector::SetJamState(bool aNewState)
 
     if (shouldInvokeHandler)
     {
-        mHandler(mJamState, mContext);
+        mCallback.Invoke(aNewState);
     }
 }
 

@@ -38,7 +38,6 @@
 #include "common/code_utils.hpp"
 #include "common/debug.hpp"
 #include "common/error.hpp"
-#include "openthread/platform/crypto.h"
 
 namespace ot {
 namespace Crypto {
@@ -50,10 +49,7 @@ HkdfSha256::HkdfSha256(void)
     SuccessOrAssert(otPlatCryptoHkdfInit(&mContext));
 }
 
-HkdfSha256::~HkdfSha256(void)
-{
-    SuccessOrAssert(otPlatCryptoHkdfDeinit(&mContext));
-}
+HkdfSha256::~HkdfSha256(void) { SuccessOrAssert(otPlatCryptoHkdfDeinit(&mContext)); }
 
 void HkdfSha256::Extract(const uint8_t *aSalt, uint16_t aSaltLength, const Key &aInputKey)
 {

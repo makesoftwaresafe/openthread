@@ -49,10 +49,9 @@ class Agent : public InstanceLocator, private NonCopyable
 {
 public:
     /**
-     * This constructor initializes the object.
+     * Initializes the object.
      *
      * @param[in]  aInstance  A reference to the OpenThread instance.
-     *
      */
     explicit Agent(Instance &aInstance)
         : InstanceLocator(aInstance)
@@ -61,16 +60,9 @@ public:
     }
 
     /**
-     * This method updates the Neighbor Discovery Agents using current Thread Network Data.
-     *
+     * Updates the Neighbor Discovery Agents using current Thread Network Data.
      */
     void UpdateService(void);
-
-    /**
-     * This method updates the prefix of the Neighbor Discovery Agent Anycast Locator.
-     *
-     */
-    void ApplyMeshLocalPrefix(void);
 
 private:
     void FreeAloc(void) { mAloc.mNext = &mAloc; }

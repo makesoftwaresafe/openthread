@@ -37,15 +37,12 @@
 
 #include <openthread/multi_radio.h>
 
-#include "common/as_core_type.hpp"
-#include "common/code_utils.hpp"
-#include "common/locator_getters.hpp"
-#include "thread/radio_selector.hpp"
+#include "instance/instance.hpp"
 
 using namespace ot;
 
-otError otMultiRadioGetNeighborInfo(otInstance *              aInstance,
-                                    const otExtAddress *      aExtAddress,
+otError otMultiRadioGetNeighborInfo(otInstance               *aInstance,
+                                    const otExtAddress       *aExtAddress,
                                     otMultiRadioNeighborInfo *aNeighborInfo)
 {
     Error     error = kErrorNone;

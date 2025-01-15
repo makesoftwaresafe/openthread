@@ -50,10 +50,9 @@ class SettingsDriver : public InstanceLocator, private NonCopyable
 {
 public:
     /**
-     * This constructor initializes the `SettingsDriver`.
+     * Initializes the `SettingsDriver`.
      *
      * @param[in]  aInstance     A reference to the OpenThread instance.
-     *
      */
     explicit SettingsDriver(Instance &aInstance)
         : InstanceLocator(aInstance)
@@ -64,11 +63,10 @@ public:
     }
 
     /**
-     * This method initializes the settings storage driver.
+     * Initializes the settings storage driver.
      *
      * @param[in]  aSensitiveKeys        A pointer to an array containing the list of sensitive keys.
      * @param[in]  aSensitiveKeysLength  The number of entries in the @p aSensitiveKeys array.
-     *
      */
     void Init(const uint16_t *aSensitiveKeys, uint16_t aSensitiveKeysLength)
     {
@@ -83,8 +81,7 @@ public:
     }
 
     /**
-     * This method deinitializes the settings driver.
-     *
+     * Deinitializes the settings driver.
      */
     void Deinit(void)
     {
@@ -94,7 +91,7 @@ public:
     }
 
     /**
-     * This method adds a value to @p aKey.
+     * Adds a value to @p aKey.
      *
      * @param[in]  aKey          The key associated with the value.
      * @param[in]  aValue        A pointer to where the new value of the setting should be read from.
@@ -103,7 +100,6 @@ public:
      *
      * @retval kErrorNone     The value was added.
      * @retval kErrorNoBufs   Not enough space to store the value.
-     *
      */
     Error Add(uint16_t aKey, const void *aValue, uint16_t aValueLength)
     {
@@ -119,7 +115,7 @@ public:
     }
 
     /**
-     * This method removes a value from @p aKey.
+     * Removes a value from @p aKey.
      *
      * @param[in] aKey    The key associated with the value.
      * @param[in] aIndex  The index of the value to be removed.
@@ -127,7 +123,6 @@ public:
      *
      * @retval kErrorNone       The given key and index was found and removed successfully.
      * @retval kErrorNotFound   The given key or index was not found.
-     *
      */
     Error Delete(uint16_t aKey, int aIndex = -1)
     {
@@ -142,7 +137,7 @@ public:
     }
 
     /**
-     * This method fetches the value identified by @p aKey at a given @p aIndex.
+     * Fetches the value identified by @p aKey at a given @p aIndex.
      *
      * @param[in]      aKey          The key associated with the requested value.
      * @param[in]      aIndex        The index of the specific item to get.
@@ -156,7 +151,6 @@ public:
      *
      * @retval kErrorNone        The value was fetched successfully.
      * @retval kErrorNotFound    The key was not found.
-     *
      */
     Error Get(uint16_t aKey, int aIndex, void *aValue, uint16_t *aValueLength) const
     {
@@ -172,7 +166,7 @@ public:
     }
 
     /**
-     * This method fetches the value identified by @p aKey.
+     * Fetches the value identified by @p aKey.
      *
      * @param[in]      aKey          The key associated with the requested value.
      * @param[out]     aValue        A pointer to where the value of the setting should be written.
@@ -185,12 +179,11 @@ public:
      *
      * @retval kErrorNone        The value was fetched successfully.
      * @retval kErrorNotFound    The key was not found.
-     *
      */
     Error Get(uint16_t aKey, void *aValue, uint16_t *aValueLength) const { return Get(aKey, 0, aValue, aValueLength); }
 
     /**
-     * This method sets or replaces the value identified by @p aKey.
+     * Sets or replaces the value identified by @p aKey.
      *
      * If there was more than one value previously associated with @p aKey, then they are all deleted and replaced with
      * this single entry.
@@ -202,7 +195,6 @@ public:
      *
      * @retval kErrorNone     The value was changed.
      * @retval kErrorNoBufs   Not enough space to store the value.
-     *
      */
     Error Set(uint16_t aKey, const void *aValue, uint16_t aValueLength)
     {
@@ -218,8 +210,7 @@ public:
     }
 
     /**
-     * This method removes all values.
-     *
+     * Removes all values.
      */
     void Wipe(void)
     {

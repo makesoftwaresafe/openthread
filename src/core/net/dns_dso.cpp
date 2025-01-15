@@ -30,14 +30,7 @@
 
 #if OPENTHREAD_CONFIG_DNS_DSO_ENABLE
 
-#include "common/array.hpp"
-#include "common/as_core_type.hpp"
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/instance.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/random.hpp"
+#include "instance/instance.hpp"
 
 /**
  * @file
@@ -80,9 +73,9 @@ extern "C" void otPlatDsoHandleDisconnected(otPlatDsoConnection *aConnection, ot
 //---------------------------------------------------------------------------------------------------------------------
 // Dso::Connection
 
-Dso::Connection::Connection(Instance &           aInstance,
+Dso::Connection::Connection(Instance            &aInstance,
                             const Ip6::SockAddr &aPeerSockAddr,
-                            Callbacks &          aCallbacks,
+                            Callbacks           &aCallbacks,
                             uint32_t             aInactivityTimeout,
                             uint32_t             aKeepAliveInterval)
     : InstanceLocator(aInstance)
@@ -303,15 +296,10 @@ void Dso::Connection::SetLongLivedOperation(bool aLongLivedOperation)
 
     if (!mLongLivedOperation)
     {
-        TimeMilli now = TimerMilli::GetNow();
-        TimeMilli nextTime;
+        NextFireTime nextTime;
 
-        nextTime = GetNextFireTime(now);
-
-        if (nextTime != now.GetDistantFuture())
-        {
-            Get<Dso>().mTimer.FireAtIfEarlier(nextTime);
-        }
+        UpdateNextFireTime(nextTime);
+        Get<Dso>().mTimer.FireAtIfEarlier(nextTime);
     }
 
 exit:
@@ -321,7 +309,7 @@ exit:
 Error Dso::Connection::SendRetryDelayMessage(uint32_t aDelay, Dns::Header::Response aResponseCode)
 {
     Error         error   = kErrorNone;
-    Message *     message = nullptr;
+    Message      *message = nullptr;
     RetryDelayTlv retryDelayTlv;
     MessageId     messageId;
 
@@ -411,7 +399,7 @@ Error Dso::Connection::SendKeepAliveMessage(MessageType aMessageType, MessageId 
     // `kResponseMessage`.
 
     Error        error   = kErrorNone;
-    Message *    message = nullptr;
+    Message     *message = nullptr;
     KeepAliveTlv keepAliveTlv;
 
     switch (mState)
@@ -479,9 +467,9 @@ exit:
     return error;
 }
 
-Error Dso::Connection::SendMessage(Message &             aMessage,
+Error Dso::Connection::SendMessage(Message              &aMessage,
                                    MessageType           aMessageType,
-                                   MessageId &           aMessageId,
+                                   MessageId            &aMessageId,
                                    Dns::Header::Response aResponseCode,
                                    uint32_t              aResponseTimeout)
 {
@@ -787,7 +775,7 @@ exit:
 }
 
 Error Dso::Connection::ProcessRequestOrUnidirectionalMessage(const Dns::Header &aHeader,
-                                                             const Message &    aMessage,
+                                                             const Message     &aMessage,
                                                              Tlv::Type          aPrimaryTlvType)
 {
     Error error = kErrorAbort;
@@ -846,7 +834,7 @@ Error Dso::Connection::ProcessRequestOrUnidirectionalMessage(const Dns::Header &
 }
 
 Error Dso::Connection::ProcessResponseMessage(const Dns::Header &aHeader,
-                                              const Message &    aMessage,
+                                              const Message     &aMessage,
                                               Tlv::Type          aPrimaryTlvType)
 {
     Error     error = kErrorAbort;
@@ -990,7 +978,8 @@ Error Dso::Connection::ProcessKeepAliveMessage(const Dns::Header &aHeader, const
     AdjustInactivityTimeout(keepAliveTlv.GetInactivityTimeout());
     mKeepAlive.SetInterval(keepAliveTlv.GetKeepAliveInterval());
 
-    LogInfo("Timeouts Inactivity:%u, KeepAlive:%u", mInactivity.GetInterval(), mKeepAlive.GetInterval());
+    LogInfo("Timeouts Inactivity:%lu, KeepAlive:%lu", ToUlong(mInactivity.GetInterval()),
+            ToUlong(mKeepAlive.GetInterval()));
 
     error = kErrorNone;
 
@@ -1019,7 +1008,7 @@ Error Dso::Connection::ProcessRetryDelayMessage(const Dns::Header &aHeader, cons
     mRetryDelay          = retryDelayTlv.GetRetryDelay();
 
     LogInfo("Received Retry Delay message from server %s", mPeerSockAddr.ToString().AsCString());
-    LogInfo("   RetryDelay:%u ms, ResponseCode:%d", mRetryDelay, mRetryDelayErrorCode);
+    LogInfo("   RetryDelay:%lu ms, ResponseCode:%d", ToUlong(mRetryDelay), mRetryDelayErrorCode);
 
     Disconnect(kGracefullyClose, kReasonServerRetryDelayRequest);
 
@@ -1029,7 +1018,7 @@ exit:
 
 void Dso::Connection::SendErrorResponse(const Dns::Header &aHeader, Dns::Header::Response aResponseCode)
 {
-    Message *   response = NewMessage();
+    Message    *response = NewMessage();
     Dns::Header header;
 
     VerifyOrExit(response != nullptr);
@@ -1125,7 +1114,7 @@ void Dso::Connection::AdjustInactivityTimeout(uint32_t aNewTimeout)
             // five seconds or one quarter of the new inactivity
             // timeout, whichever is greater [RFC 8490 - 7.1.1].
 
-            newExpiration = now + OT_MAX(kMinServerInactivityWaitTime, aNewTimeout / 4);
+            newExpiration = now + Max(kMinServerInactivityWaitTime, aNewTimeout / 4);
         }
     }
 
@@ -1143,13 +1132,12 @@ uint32_t Dso::Connection::CalculateServerInactivityWaitTime(void) const
 
     OT_ASSERT(mInactivity.IsUsed());
 
-    return OT_MAX(mInactivity.GetInterval() * 2, kMinServerInactivityWaitTime);
+    return Max(mInactivity.GetInterval() * 2, kMinServerInactivityWaitTime);
 }
 
 void Dso::Connection::ResetTimeouts(bool aIsKeepAliveMessage)
 {
-    TimeMilli now = TimerMilli::GetNow();
-    TimeMilli nextTime;
+    NextFireTime nextTime;
 
     // At both servers and clients, the generation or reception of any
     // complete DNS message resets both timers for that DSO
@@ -1169,7 +1157,7 @@ void Dso::Connection::ResetTimeouts(bool aIsKeepAliveMessage)
         // that the expiration time calculations below stay within the
         // `TimerMilli` range.
 
-        mKeepAlive.SetExpirationTime(now + mKeepAlive.GetInterval() * (IsServer() ? 2 : 1));
+        mKeepAlive.SetExpirationTime(nextTime.GetNow() + mKeepAlive.GetInterval() * (IsServer() ? 2 : 1));
     }
 
     if (!aIsKeepAliveMessage)
@@ -1177,7 +1165,7 @@ void Dso::Connection::ResetTimeouts(bool aIsKeepAliveMessage)
         if (mInactivity.IsUsed())
         {
             mInactivity.SetExpirationTime(
-                now + (IsServer() ? CalculateServerInactivityWaitTime() : mInactivity.GetInterval()));
+                nextTime.GetNow() + (IsServer() ? CalculateServerInactivityWaitTime() : mInactivity.GetInterval()));
         }
         else
         {
@@ -1188,22 +1176,17 @@ void Dso::Connection::ResetTimeouts(bool aIsKeepAliveMessage)
             // from `AdjustInactivityTimeout()`. In this case, we just
             // track the current time as "expiration time".
 
-            mInactivity.SetExpirationTime(now);
+            mInactivity.SetExpirationTime(nextTime.GetNow());
         }
     }
 
-    nextTime = GetNextFireTime(now);
+    UpdateNextFireTime(nextTime);
 
-    if (nextTime != now.GetDistantFuture())
-    {
-        Get<Dso>().mTimer.FireAtIfEarlier(nextTime);
-    }
+    Get<Dso>().mTimer.FireAtIfEarlier(nextTime);
 }
 
-TimeMilli Dso::Connection::GetNextFireTime(TimeMilli aNow) const
+void Dso::Connection::UpdateNextFireTime(NextFireTime &aNextTime) const
 {
-    TimeMilli nextTime = aNow.GetDistantFuture();
-
     switch (mState)
     {
     case kStateDisconnected:
@@ -1212,19 +1195,17 @@ TimeMilli Dso::Connection::GetNextFireTime(TimeMilli aNow) const
     case kStateConnecting:
         // While in `kStateConnecting`, Keep Alive timer is
         // used for `kConnectingTimeout`.
-        VerifyOrExit(mKeepAlive.GetExpirationTime() > aNow, nextTime = aNow);
-        nextTime = mKeepAlive.GetExpirationTime();
+        aNextTime.UpdateIfEarlier(mKeepAlive.GetExpirationTime());
         break;
 
     case kStateConnectedButSessionless:
     case kStateEstablishingSession:
     case kStateSessionEstablished:
-        nextTime = OT_MIN(nextTime, mPendingRequests.GetNextFireTime(aNow));
+        mPendingRequests.UpdateNextFireTime(aNextTime);
 
         if (mKeepAlive.IsUsed())
         {
-            VerifyOrExit(mKeepAlive.GetExpirationTime() > aNow, nextTime = aNow);
-            nextTime = OT_MIN(nextTime, mKeepAlive.GetExpirationTime());
+            aNextTime.UpdateIfEarlier(mKeepAlive.GetExpirationTime());
         }
 
         if (mInactivity.IsUsed() && mPendingRequests.IsEmpty() && !mLongLivedOperation)
@@ -1233,18 +1214,14 @@ TimeMilli Dso::Connection::GetNextFireTime(TimeMilli aNow) const
             // a request message waiting for a response, or an
             // active long-lived operation.
 
-            VerifyOrExit(mInactivity.GetExpirationTime() > aNow, nextTime = aNow);
-            nextTime = OT_MIN(nextTime, mInactivity.GetExpirationTime());
+            aNextTime.UpdateIfEarlier(mInactivity.GetExpirationTime());
         }
 
         break;
     }
-
-exit:
-    return nextTime;
 }
 
-void Dso::Connection::HandleTimer(TimeMilli aNow, TimeMilli &aNextTime)
+void Dso::Connection::HandleTimer(NextFireTime &aNextTime)
 {
     switch (mState)
     {
@@ -1252,7 +1229,7 @@ void Dso::Connection::HandleTimer(TimeMilli aNow, TimeMilli &aNextTime)
         break;
 
     case kStateConnecting:
-        if (mKeepAlive.IsExpired(aNow))
+        if (mKeepAlive.IsExpired(aNextTime.GetNow()))
         {
             Disconnect(kGracefullyClose, kReasonFailedToConnect);
         }
@@ -1261,7 +1238,7 @@ void Dso::Connection::HandleTimer(TimeMilli aNow, TimeMilli &aNextTime)
     case kStateConnectedButSessionless:
     case kStateEstablishingSession:
     case kStateSessionEstablished:
-        if (mPendingRequests.HasAnyTimedOut(aNow))
+        if (mPendingRequests.HasAnyTimedOut(aNextTime.GetNow()))
         {
             // If server sends no response to a request, client
             // waits for 30 seconds (`kResponseTimeout`) after which
@@ -1274,7 +1251,8 @@ void Dso::Connection::HandleTimer(TimeMilli aNow, TimeMilli &aNextTime)
         // active on the session (which includes a request waiting for
         // response or an active long-lived operation).
 
-        if (mInactivity.IsUsed() && mPendingRequests.IsEmpty() && !mLongLivedOperation && mInactivity.IsExpired(aNow))
+        if (mInactivity.IsUsed() && mPendingRequests.IsEmpty() && !mLongLivedOperation &&
+            mInactivity.IsExpired(aNextTime.GetNow()))
         {
             // On client, if the inactivity timeout is reached, the
             // connection is closed gracefully. On server, if too much
@@ -1287,7 +1265,7 @@ void Dso::Connection::HandleTimer(TimeMilli aNow, TimeMilli &aNextTime)
             ExitNow();
         }
 
-        if (mKeepAlive.IsUsed() && mKeepAlive.IsExpired(aNow))
+        if (mKeepAlive.IsUsed() && mKeepAlive.IsExpired(aNextTime.GetNow()))
         {
             // On client, if the Keep Alive interval elapses without any
             // DNS messages being sent or received, the client MUST take
@@ -1311,7 +1289,7 @@ void Dso::Connection::HandleTimer(TimeMilli aNow, TimeMilli &aNextTime)
     }
 
 exit:
-    aNextTime = OT_MIN(aNextTime, GetNextFireTime(aNow));
+    UpdateNextFireTime(aNextTime);
     SignalAnyStateChange();
 }
 
@@ -1325,11 +1303,15 @@ const char *Dso::Connection::StateToString(State aState)
         "SessionEstablished",      // (4) kStateSessionEstablished,
     };
 
-    static_assert(0 == kStateDisconnected, "kStateDisconnected value is incorrect");
-    static_assert(1 == kStateConnecting, "kStateConnecting value is incorrect");
-    static_assert(2 == kStateConnectedButSessionless, "kStateConnectedButSessionless value is incorrect");
-    static_assert(3 == kStateEstablishingSession, "kStateEstablishingSession value is incorrect");
-    static_assert(4 == kStateSessionEstablished, "kStateSessionEstablished value is incorrect");
+    struct EnumCheck
+    {
+        InitEnumValidatorCounter();
+        ValidateNextEnum(kStateDisconnected);
+        ValidateNextEnum(kStateConnecting);
+        ValidateNextEnum(kStateConnectedButSessionless);
+        ValidateNextEnum(kStateEstablishingSession);
+        ValidateNextEnum(kStateSessionEstablished);
+    };
 
     return kStateStrings[aState];
 }
@@ -1342,9 +1324,13 @@ const char *Dso::Connection::MessageTypeToString(MessageType aMessageType)
         "Unidirectional", // (2) kUnidirectionalMessage
     };
 
-    static_assert(0 == kRequestMessage, "kRequestMessage value is incorrect");
-    static_assert(1 == kResponseMessage, "kResponseMessage value is incorrect");
-    static_assert(2 == kUnidirectionalMessage, "kUnidirectionalMessage value is incorrect");
+    struct EnumCheck
+    {
+        InitEnumValidatorCounter();
+        ValidateNextEnum(kRequestMessage);
+        ValidateNextEnum(kResponseMessage);
+        ValidateNextEnum(kUnidirectionalMessage);
+    };
 
     return kMessageTypeStrings[aMessageType];
 }
@@ -1364,16 +1350,20 @@ const char *Dso::Connection::DisconnectReasonToString(DisconnectReason aReason)
         "Unknown",                 // (9) kReasonUnknown
     };
 
-    static_assert(0 == kReasonFailedToConnect, "kReasonFailedToConnect value is incorrect");
-    static_assert(1 == kReasonResponseTimeout, "kReasonResponseTimeout value is incorrect");
-    static_assert(2 == kReasonPeerDoesNotSupportDso, "kReasonPeerDoesNotSupportDso value is incorrect");
-    static_assert(3 == kReasonPeerClosed, "kReasonPeerClosed value is incorrect");
-    static_assert(4 == kReasonPeerAborted, "kReasonPeerAborted value is incorrect");
-    static_assert(5 == kReasonInactivityTimeout, "kReasonInactivityTimeout value is incorrect");
-    static_assert(6 == kReasonKeepAliveTimeout, "kReasonKeepAliveTimeout value is incorrect");
-    static_assert(7 == kReasonServerRetryDelayRequest, "kReasonServerRetryDelayRequest value is incorrect");
-    static_assert(8 == kReasonPeerMisbehavior, "kReasonPeerMisbehavior value is incorrect");
-    static_assert(9 == kReasonUnknown, "kReasonUnknown value is incorrect");
+    struct EnumCheck
+    {
+        InitEnumValidatorCounter();
+        ValidateNextEnum(kReasonFailedToConnect);
+        ValidateNextEnum(kReasonResponseTimeout);
+        ValidateNextEnum(kReasonPeerDoesNotSupportDso);
+        ValidateNextEnum(kReasonPeerClosed);
+        ValidateNextEnum(kReasonPeerAborted);
+        ValidateNextEnum(kReasonInactivityTimeout);
+        ValidateNextEnum(kReasonKeepAliveTimeout);
+        ValidateNextEnum(kReasonServerRetryDelayRequest);
+        ValidateNextEnum(kReasonPeerMisbehavior);
+        ValidateNextEnum(kReasonUnknown);
+    };
 
     return kDisconnectReasonStrings[aReason];
 }
@@ -1407,10 +1397,7 @@ exit:
     return error;
 }
 
-void Dso::Connection::PendingRequests::Remove(MessageId aMessageId)
-{
-    mRequests.RemoveMatching(aMessageId);
-}
+void Dso::Connection::PendingRequests::Remove(MessageId aMessageId) { mRequests.RemoveMatching(aMessageId); }
 
 bool Dso::Connection::PendingRequests::HasAnyTimedOut(TimeMilli aNow) const
 {
@@ -1428,18 +1415,12 @@ bool Dso::Connection::PendingRequests::HasAnyTimedOut(TimeMilli aNow) const
     return timedOut;
 }
 
-TimeMilli Dso::Connection::PendingRequests::GetNextFireTime(TimeMilli aNow) const
+void Dso::Connection::PendingRequests::UpdateNextFireTime(NextFireTime &aNextTime) const
 {
-    TimeMilli nextTime = aNow.GetDistantFuture();
-
     for (const Entry &entry : mRequests)
     {
-        VerifyOrExit(entry.mTimeout > aNow, nextTime = aNow);
-        nextTime = OT_MIN(entry.mTimeout, nextTime);
+        aNextTime.UpdateIfEarlier(entry.mTimeout);
     }
-
-exit:
-    return nextTime;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -1448,7 +1429,7 @@ exit:
 Dso::Dso(Instance &aInstance)
     : InstanceLocator(aInstance)
     , mAcceptHandler(nullptr)
-    , mTimer(aInstance, HandleTimer)
+    , mTimer(aInstance)
 {
 }
 
@@ -1458,10 +1439,7 @@ void Dso::StartListening(AcceptHandler aAcceptHandler)
     otPlatDsoEnableListening(&GetInstance(), true);
 }
 
-void Dso::StopListening(void)
-{
-    otPlatDsoEnableListening(&GetInstance(), false);
-}
+void Dso::StopListening(void) { otPlatDsoEnableListening(&GetInstance(), false); }
 
 Dso::Connection *Dso::FindClientConnection(const Ip6::SockAddr &aPeerSockAddr)
 {
@@ -1487,37 +1465,56 @@ exit:
     return connection;
 }
 
-void Dso::HandleTimer(Timer &aTimer)
-{
-    aTimer.Get<Dso>().HandleTimer();
-}
-
 void Dso::HandleTimer(void)
 {
-    TimeMilli   now      = TimerMilli::GetNow();
-    TimeMilli   nextTime = now.GetDistantFuture();
-    Connection *conn;
-    Connection *next;
+    NextFireTime nextTime;
+    Connection  *conn;
+    Connection  *next;
 
     for (conn = mClientConnections.GetHead(); conn != nullptr; conn = next)
     {
         next = conn->GetNext();
-        conn->HandleTimer(now, nextTime);
+        conn->HandleTimer(nextTime);
     }
 
     for (conn = mServerConnections.GetHead(); conn != nullptr; conn = next)
     {
         next = conn->GetNext();
-        conn->HandleTimer(now, nextTime);
+        conn->HandleTimer(nextTime);
     }
 
-    if (nextTime != now.GetDistantFuture())
-    {
-        mTimer.FireAtIfEarlier(nextTime);
-    }
+    mTimer.FireAtIfEarlier(nextTime);
 }
 
 } // namespace Dns
 } // namespace ot
+
+#if OPENTHREAD_CONFIG_DNS_DSO_MOCK_PLAT_APIS_ENABLE
+
+OT_TOOL_WEAK void otPlatDsoEnableListening(otInstance *aInstance, bool aEnable)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aEnable);
+}
+
+OT_TOOL_WEAK void otPlatDsoConnect(otPlatDsoConnection *aConnection, const otSockAddr *aPeerSockAddr)
+{
+    OT_UNUSED_VARIABLE(aConnection);
+    OT_UNUSED_VARIABLE(aPeerSockAddr);
+}
+
+OT_TOOL_WEAK void otPlatDsoSend(otPlatDsoConnection *aConnection, otMessage *aMessage)
+{
+    OT_UNUSED_VARIABLE(aConnection);
+    OT_UNUSED_VARIABLE(aMessage);
+}
+
+OT_TOOL_WEAK void otPlatDsoDisconnect(otPlatDsoConnection *aConnection, otPlatDsoDisconnectMode aMode)
+{
+    OT_UNUSED_VARIABLE(aConnection);
+    OT_UNUSED_VARIABLE(aMode);
+}
+
+#endif // OPENTHREAD_CONFIG_DNS_DSO_MOCK_PLAT_APIS_ENABLE
 
 #endif // OPENTHREAD_CONFIG_DNS_DSO_ENABLE

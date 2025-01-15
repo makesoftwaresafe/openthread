@@ -36,8 +36,10 @@
 
 #include "openthread-core-config.h"
 
+#include "common/callback.hpp"
 #include "common/locator.hpp"
 #include "common/non_copyable.hpp"
+#include "common/tasklet.hpp"
 #include "common/timer.hpp"
 #include "mac/channel_mask.hpp"
 #include "mac/mac.hpp"
@@ -52,8 +54,7 @@ class MeshForwarder;
 namespace Mle {
 
 /**
- * This class implements MLE Discover Scan.
- *
+ * Implements MLE Discover Scan.
  */
 class DiscoverScanner : public InstanceLocator, private NonCopyable
 {
@@ -64,46 +65,41 @@ class DiscoverScanner : public InstanceLocator, private NonCopyable
 public:
     /**
      * Default scan duration (per channel), in milliseconds.
-     *
      */
     static constexpr uint32_t kDefaultScanDuration = Mac::kScanDurationDefault;
 
     /**
-     * This type represents Discover Scan result.
-     *
+     * Represents Discover Scan result.
      */
     typedef otActiveScanResult ScanResult;
 
     /**
-     * This type represents the handler function pointer called with any Discover Scan result or when the scan
+     * Represents the handler function pointer called with any Discover Scan result or when the scan
      * completes.
      *
      * The handler function format is `void (*oHandler)(ScanResult *aResult, void *aContext);`. End of scan is
      * indicated by `aResult` pointer being set to `nullptr`.
-     *
      */
     typedef otHandleActiveScanResult Handler;
 
     /**
-     * This type represents the filter indexes, i.e., hash bit index values for the bloom filter (calculated from a
+     * Represents the filter indexes, i.e., hash bit index values for the bloom filter (calculated from a
      * Joiner ID).
      *
      * This is used when filtering is enabled during Discover Scan, i.e., received MLE Discovery Responses with steering
      * data (bloom filter) not containing the given indexes are filtered.
-     *
      */
     typedef MeshCoP::SteeringData::HashBitIndexes FilterIndexes;
 
     /**
-     * This constructor initializes the object.
+     * Initializes the object.
      *
      * @param[in]  aInstance     A reference to the OpenThread instance.
-     *
      */
     explicit DiscoverScanner(Instance &aInstance);
 
     /**
-     * This method starts a Thread Discovery Scan.
+     * Starts a Thread Discovery Scan.
      *
      * @param[in]  aScanChannels      Channel mask listing channels to scan (if empty, use all supported channels).
      * @param[in]  aPanId             The PAN ID filter (set to Broadcast PAN to disable filter).
@@ -120,26 +116,24 @@ public:
      * @retval kErrorInvalidState   The IPv6 interface is not enabled (netif is not up).
      * @retval kErrorNoBufs         Could not allocate message for Discovery Request.
      * @retval kErrorBusy           Thread Discovery Scan is already in progress.
-     *
      */
     Error Discover(const Mac::ChannelMask &aScanChannels,
                    Mac::PanId              aPanId,
                    bool                    aJoiner,
                    bool                    aEnableFiltering,
-                   const FilterIndexes *   aFilterIndexes,
+                   const FilterIndexes    *aFilterIndexes,
                    Handler                 aCallback,
-                   void *                  aContext);
+                   void                   *aContext);
 
     /**
-     * This method indicates whether or not an MLE Thread Discovery Scan is currently in progress.
+     * Indicates whether or not an MLE Thread Discovery Scan is currently in progress.
      *
      * @returns true if an MLE Thread Discovery Scan is in progress, false otherwise.
-     *
      */
     bool IsInProgress(void) const { return (mState != kStateIdle); }
 
     /**
-     * This method sets Joiner Advertisement.
+     * Sets Joiner Advertisement.
      *
      * @param[in]  aOui             The Vendor OUI for Joiner Advertisement.
      * @param[in]  aAdvData         A pointer to AdvData for Joiner Advertisement.
@@ -147,7 +141,6 @@ public:
      *
      * @retval kErrorNone           Successfully set Joiner Advertisement.
      * @retval kErrorInvalidArgs    Invalid AdvData.
-     *
      */
     Error SetJoinerAdvertisement(uint32_t aOui, const uint8_t *aAdvData, uint8_t aAdvDataLength);
 
@@ -163,28 +156,31 @@ private:
 
     // Methods used by `MeshForwarder`
     Mac::TxFrame *PrepareDiscoveryRequestFrame(Mac::TxFrame &aFrame);
-    void          HandleDiscoveryRequestFrameTxDone(Message &aMessage);
+    void          HandleDiscoveryRequestFrameTxDone(Message &aMessage, Error aError);
     void          Stop(void) { HandleDiscoverComplete(); }
 
     // Methods used from `Mle`
     void HandleDiscoveryResponse(Mle::RxInfo &aRxInfo) const;
 
-    void        HandleDiscoverComplete(void);
-    static void HandleTimer(Timer &aTimer);
-    void        HandleTimer(void);
+    void HandleDiscoverComplete(void);
+    void HandleScanDoneTask(void);
+    void HandleTimer(void);
 
-    Handler          mHandler;
-    void *           mHandlerContext;
-    TimerMilli       mTimer;
-    FilterIndexes    mFilterIndexes;
-    Mac::ChannelMask mScanChannels;
-    State            mState;
-    uint32_t         mOui;
-    uint8_t          mScanChannel;
-    uint8_t          mAdvDataLength;
-    uint8_t          mAdvData[MeshCoP::JoinerAdvertisementTlv::kAdvDataMaxLength];
-    bool             mEnableFiltering : 1;
-    bool             mShouldRestorePanId : 1;
+    using ScanTimer    = TimerMilliIn<DiscoverScanner, &DiscoverScanner::HandleTimer>;
+    using ScanDoneTask = TaskletIn<DiscoverScanner, &DiscoverScanner::HandleScanDoneTask>;
+
+    Callback<Handler> mCallback;
+    ScanDoneTask      mScanDoneTask;
+    ScanTimer         mTimer;
+    FilterIndexes     mFilterIndexes;
+    Mac::ChannelMask  mScanChannels;
+    State             mState;
+    uint32_t          mOui;
+    uint8_t           mScanChannel;
+    uint8_t           mAdvDataLength;
+    uint8_t           mAdvData[MeshCoP::JoinerAdvertisementTlv::kAdvDataMaxLength];
+    bool              mEnableFiltering : 1;
+    bool              mShouldRestorePanId : 1;
 };
 
 } // namespace Mle

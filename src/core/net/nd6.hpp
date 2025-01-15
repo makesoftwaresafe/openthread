@@ -31,7 +31,6 @@
  *   This file includes definitions for IPv6 Neighbor Discovery (ND).
  *
  * See RFC 4861 (https://tools.ietf.org/html/rfc4861) and RFC 4191 (https://tools.ietf.org/html/rfc4191).
- *
  */
 
 #ifndef ND6_HPP_
@@ -39,105 +38,104 @@
 
 #include "openthread-core-config.h"
 
+#if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+
 #include <stdint.h>
 
 #include <openthread/netdata.h>
+#include <openthread/platform/infra_if.h>
 #include <openthread/platform/toolchain.h>
 
+#include "border_router/infra_if.hpp"
 #include "common/const_cast.hpp"
 #include "common/encoding.hpp"
 #include "common/equatable.hpp"
+#include "common/heap_array.hpp"
 #include "net/icmp6.hpp"
 #include "net/ip6.hpp"
+#include "net/ip6_headers.hpp"
 #include "thread/network_data_types.hpp"
-
-using ot::Encoding::BigEndian::HostSwap16;
-using ot::Encoding::BigEndian::HostSwap32;
 
 namespace ot {
 namespace Ip6 {
 namespace Nd {
 
-typedef NetworkData::RoutePreference RoutePreference; ///< Route Preference
+typedef NetworkData::RoutePreference  RoutePreference;  ///< Route Preference
+typedef Data<kWithUint16Length>       Icmp6Packet;      ///< A data buffer for an ICMPv6 packet.
+typedef otPlatInfraIfLinkLayerAddress LinkLayerAddress; ///< An infra-if link-layer address.
 
 /**
- * This class represents the variable length options in Neighbor Discovery messages.
+ * Represents the variable length options in Neighbor Discovery messages.
  *
  * @sa PrefixInfoOption
  * @sa RouteInfoOption
- *
  */
 OT_TOOL_PACKED_BEGIN
 class Option
 {
-    friend class RouterAdvertMessage;
+    friend class RouterAdvert;
 
 public:
     enum Type : uint8_t
     {
-        kTypePrefixInfo = 3,  ///< Prefix Information Option.
-        kTypeRouteInfo  = 24, ///< Route Information Option.
+        kSourceLinkLayerAddr  = 1,  ///< Source Link Layer Address Option.
+        kTargetLinkLayerAddr  = 2,  ///< Target Link Layer Address Option.
+        kTypePrefixInfo       = 3,  ///< Prefix Information Option.
+        kTypeRouteInfo        = 24, ///< Route Information Option.
+        kTypeRaFlagsExtension = 26, ///< RA Flags Extension Option.
     };
 
     static constexpr uint16_t kLengthUnit = 8; ///< The unit of length in octets.
 
     /**
-     * This method gets the option type.
+     * Gets the option type.
      *
      * @returns  The option type.
-     *
      */
     uint8_t GetType(void) const { return mType; }
 
     /**
-     * This method sets the option type.
+     * Sets the option type.
      *
      * @param[in] aType  The option type.
-     *
-     *
      */
     void SetType(Type aType) { mType = aType; }
 
     /**
-     * This method sets the length based on a given total option size in bytes.
+     * Sets the length based on a given total option size in bytes.
      *
      * Th option must end on a 64-bit boundary, so the length is derived as `(aSize + 7) / 8 * 8`.
      *
      * @param[in]  aSize  The size of option in bytes.
-     *
      */
-    void SetSize(uint16_t aSize) { mLength = static_cast<uint8_t>((aSize + kLengthUnit - 1) / kLengthUnit); }
+    void SetSize(uint16_t aSize) { mLength = static_cast<uint8_t>(DivideAndRoundUp(aSize, kLengthUnit)); }
 
     /**
-     * This method returns the size of the option in bytes.
+     * Returns the size of the option in bytes.
      *
      * @returns  The size of the option in bytes.
-     *
      */
     uint16_t GetSize(void) const { return mLength * kLengthUnit; }
 
     /**
-     * This method sets the length of the option (in unit of 8 bytes).
+     * Sets the length of the option (in unit of 8 bytes).
      *
      * @param[in]  aLength  The length of the option in unit of 8 bytes.
-     *
      */
     void SetLength(uint8_t aLength) { mLength = aLength; }
 
     /**
-     * This method returns the length of the option (in unit of 8 bytes).
+     * Returns the length of the option (in unit of 8 bytes).
      *
      * @returns  The length of the option in unit of 8 bytes.
-     *
      */
     uint16_t GetLength(void) const { return mLength; }
 
     /**
-     * This method indicates whether or not this option is valid.
+     * Indicates whether or not this option is valid.
      *
      * @retval TRUE   The option is valid.
      * @retval FALSE  The option is not valid.
-     *
      */
     bool IsValid(void) const { return mLength > 0; }
 
@@ -156,7 +154,7 @@ private:
     private:
         static const Option *Next(const Option *aOption);
         void                 Advance(void);
-        const Option *       Validate(const Option *aOption) const;
+        const Option        *Validate(const Option *aOption) const;
 
         const Option *mOption;
         const Option *mEnd;
@@ -167,119 +165,117 @@ private:
 } OT_TOOL_PACKED_END;
 
 /**
- * This class represents the Prefix Information Option.
+ * Represents the Prefix Information Option.
  *
  * See section 4.6.2 of RFC 4861 for definition of this option [https://tools.ietf.org/html/rfc4861#section-4.6.2]
- *
  */
 OT_TOOL_PACKED_BEGIN
 class PrefixInfoOption : public Option, private Clearable<PrefixInfoOption>
 {
+    friend class Clearable<PrefixInfoOption>;
+
 public:
     static constexpr Type kType = kTypePrefixInfo; ///< Prefix Information Option Type.
 
     /**
-     * This method initializes the Prefix Info option with proper type and length and sets all other fields to zero.
-     *
+     * Initializes the Prefix Info option with proper type and length and sets all other fields to zero.
      */
     void Init(void);
 
     /**
-     * This method indicates whether or not the on-link flag is set.
+     * Indicates whether or not the on-link flag is set.
      *
      * @retval TRUE  The on-link flag is set.
      * @retval FALSE The on-link flag is not set.
-     *
      */
     bool IsOnLinkFlagSet(void) const { return (mFlags & kOnLinkFlagMask) != 0; }
 
     /**
-     * This method sets the on-link (L) flag.
-     *
+     * Sets the on-link (L) flag.
      */
     void SetOnLinkFlag(void) { mFlags |= kOnLinkFlagMask; }
 
     /**
-     * This method clears the on-link (L) flag.
-     *
+     * Clears the on-link (L) flag.
      */
     void ClearOnLinkFlag(void) { mFlags &= ~kOnLinkFlagMask; }
 
     /**
-     * This method indicates whether or not the autonomous address-configuration (A) flag is set.
+     * Indicates whether or not the autonomous address-configuration (A) flag is set.
      *
      * @retval TRUE  The auto address-config flag is set.
      * @retval FALSE The auto address-config flag is not set.
-     *
      */
     bool IsAutoAddrConfigFlagSet(void) const { return (mFlags & kAutoConfigFlagMask) != 0; }
 
     /**
-     * This method sets the autonomous address-configuration (A) flag.
-     *
+     * Sets the autonomous address-configuration (A) flag.
      */
     void SetAutoAddrConfigFlag(void) { mFlags |= kAutoConfigFlagMask; }
 
     /**
-     * This method clears the autonomous address-configuration (A) flag.
-     *
+     * Clears the autonomous address-configuration (A) flag.
      */
     void ClearAutoAddrConfigFlag(void) { mFlags &= ~kAutoConfigFlagMask; }
 
     /**
-     * This method sets the valid lifetime of the prefix in seconds.
+     * Indicates whether or not the DhCPv6-PD Preferred (P) flag is set.
+     *
+     * @retval TRUE  The DHCPv6-PD Preferred (P) flag is set.
+     * @retval FALSE The DHCPv6-PD Preferred (P) flag is not set.
+     */
+    bool IsDhcp6PdPreferredFlagSet(void) const { return (mFlags & kDhcp6PdPreferredFlagMask) != 0; }
+
+    /**
+     * Sets the valid lifetime of the prefix in seconds.
      *
      * @param[in]  aValidLifetime  The valid lifetime in seconds.
-     *
      */
-    void SetValidLifetime(uint32_t aValidLifetime) { mValidLifetime = HostSwap32(aValidLifetime); }
+    void SetValidLifetime(uint32_t aValidLifetime) { mValidLifetime = BigEndian::HostSwap32(aValidLifetime); }
 
     /**
      * THis method gets the valid lifetime of the prefix in seconds.
      *
      * @returns  The valid lifetime in seconds.
-     *
      */
-    uint32_t GetValidLifetime(void) const { return HostSwap32(mValidLifetime); }
+    uint32_t GetValidLifetime(void) const { return BigEndian::HostSwap32(mValidLifetime); }
 
     /**
-     * This method sets the preferred lifetime of the prefix in seconds.
+     * Sets the preferred lifetime of the prefix in seconds.
      *
      * @param[in]  aPreferredLifetime  The preferred lifetime in seconds.
-     *
      */
-    void SetPreferredLifetime(uint32_t aPreferredLifetime) { mPreferredLifetime = HostSwap32(aPreferredLifetime); }
+    void SetPreferredLifetime(uint32_t aPreferredLifetime)
+    {
+        mPreferredLifetime = BigEndian::HostSwap32(aPreferredLifetime);
+    }
 
     /**
      * THis method returns the preferred lifetime of the prefix in seconds.
      *
      * @returns  The preferred lifetime in seconds.
-     *
      */
-    uint32_t GetPreferredLifetime(void) const { return HostSwap32(mPreferredLifetime); }
+    uint32_t GetPreferredLifetime(void) const { return BigEndian::HostSwap32(mPreferredLifetime); }
 
     /**
-     * This method sets the prefix.
+     * Sets the prefix.
      *
      * @param[in]  aPrefix  The prefix contained in this option.
-     *
      */
     void SetPrefix(const Prefix &aPrefix);
 
     /**
-     * This method gets the prefix in this option.
+     * Gets the prefix in this option.
      *
      * @param[out] aPrefix   Reference to a `Prefix` to return the prefix.
-     *
      */
     void GetPrefix(Prefix &aPrefix) const;
 
     /**
-     * This method indicates whether or not the option is valid.
+     * Indicates whether or not the option is valid.
      *
      * @retval TRUE  The option is valid
      * @retval FALSE The option is not valid.
-     *
      */
     bool IsValid(void) const;
 
@@ -291,7 +287,7 @@ private:
     //   0                   1                   2                   3
     //   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
     //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    //  |     Type      |    Length     | Prefix Length |L|A| Reserved1 |
+    //  |     Type      |    Length     | Prefix Length |L|A|R|P| Rsvd1 |
     //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     //  |                         Valid Lifetime                        |
     //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -307,9 +303,13 @@ private:
     //  +                                                               +
     //  |                                                               |
     //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    //
+    //  Reference for P Flag (DHCPv6-PD preferred flag):
+    //  https://bib.ietf.org/public/rfc/bibxml3/reference.I-D.ietf-6man-pio-pflag.xml
 
-    static constexpr uint8_t kAutoConfigFlagMask = 0x40; // Autonomous address-configuration flag.
-    static constexpr uint8_t kOnLinkFlagMask     = 0x80; // On-link flag.
+    static constexpr uint8_t kOnLinkFlagMask           = 0x80; // On-link - L flag.
+    static constexpr uint8_t kAutoConfigFlagMask       = 0x40; // Autonomous address-configuration - A flag.
+    static constexpr uint8_t kDhcp6PdPreferredFlagMask = 0x10; // DHCPv6-PD preferred - P flag.
 
     uint8_t  mPrefixLength;      // The prefix length in bits.
     uint8_t  mFlags;             // The flags field.
@@ -322,82 +322,75 @@ private:
 static_assert(sizeof(PrefixInfoOption) == 32, "invalid PrefixInfoOption structure");
 
 /**
- * This class represents the Route Information Option.
+ * Represents the Route Information Option.
  *
  * See section 2.3 of RFC 4191 for definition of this option. [https://tools.ietf.org/html/rfc4191#section-2.3]
- *
  */
 OT_TOOL_PACKED_BEGIN
 class RouteInfoOption : public Option, private Clearable<RouteInfoOption>
 {
+    friend class Clearable<RouteInfoOption>;
+
 public:
     static constexpr uint16_t kMinSize = kLengthUnit;    ///< Minimum size (in bytes) of a Route Info Option
     static constexpr Type     kType    = kTypeRouteInfo; ///< Route Information Option Type.
 
     /**
-     * This method initializes the option setting the type and clearing (setting to zero) all other fields.
-     *
+     * Initializes the option setting the type and clearing (setting to zero) all other fields.
      */
     void Init(void);
 
     /**
-     * This method sets the route preference.
+     * Sets the route preference.
      *
      * @param[in]  aPreference  The route preference.
-     *
      */
     void SetPreference(RoutePreference aPreference);
 
     /**
-     * This method gets the route preference.
+     * Gets the route preference.
      *
      * @returns  The route preference.
-     *
      */
     RoutePreference GetPreference(void) const;
 
     /**
-     * This method sets the lifetime of the route in seconds.
+     * Sets the lifetime of the route in seconds.
      *
      * @param[in]  aLifetime  The lifetime of the route in seconds.
-     *
      */
-    void SetRouteLifetime(uint32_t aLifetime) { mRouteLifetime = HostSwap32(aLifetime); }
+    void SetRouteLifetime(uint32_t aLifetime) { mRouteLifetime = BigEndian::HostSwap32(aLifetime); }
 
     /**
-     * This method gets Route Lifetime in seconds.
+     * Gets Route Lifetime in seconds.
      *
      * @returns  The Route Lifetime in seconds.
-     *
      */
-    uint32_t GetRouteLifetime(void) const { return HostSwap32(mRouteLifetime); }
+    uint32_t GetRouteLifetime(void) const { return BigEndian::HostSwap32(mRouteLifetime); }
 
     /**
-     * This method sets the prefix and adjusts the option length based on the prefix length.
+     * Sets the prefix and adjusts the option length based on the prefix length.
      *
      * @param[in]  aPrefix  The prefix contained in this option.
-     *
      */
     void SetPrefix(const Prefix &aPrefix);
 
     /**
-     * This method gets the prefix in this option.
+     * Gets the prefix in this option.
      *
      * @param[out] aPrefix   Reference to a `Prefix` to return the prefix.
-     *
      */
     void GetPrefix(Prefix &aPrefix) const;
 
     /**
-     * This method tells whether this option is valid.
+     * Tells whether this option is valid.
      *
      * @returns  A boolean indicates whether this option is valid.
-     *
      */
     bool IsValid(void) const;
 
     /**
-     * This static method calculates the minimum option length for a given prefix length.
+     * Calculates the minimum option length for a given prefix length.
      *
      * The option length (which is in unit of 8 octets) can be 1, 2, or 3 depending on the prefix length. It can be 1
      * for a zero prefix length, 2 if the prefix length is not greater than 64, and 3 otherwise.
@@ -405,17 +398,15 @@ public:
      * @param[in] aPrefixLength   The prefix length (in bits).
      *
      * @returns The option length (in unit of 8 octet) for @p aPrefixLength.
-     *
      */
     static uint8_t OptionLengthForPrefix(uint8_t aPrefixLength);
 
     /**
-     * This static method calculates the minimum option size (in bytes) for a given prefix length.
+     * Calculates the minimum option size (in bytes) for a given prefix length.
      *
      * @param[in] aPrefixLength   The prefix length (in bits).
      *
      * @returns The option size (in bytes) for @p aPrefixLength.
-     *
      */
     static uint16_t OptionSizeForPrefix(uint8_t aPrefixLength)
     {
@@ -442,7 +433,7 @@ private:
     static constexpr uint8_t kPreferenceOffset = 3;
     static constexpr uint8_t kPreferenceMask   = 3 << kPreferenceOffset;
 
-    uint8_t *      GetPrefixBytes(void) { return AsNonConst(AsConst(this)->GetPrefixBytes()); }
+    uint8_t       *GetPrefixBytes(void) { return AsNonConst(AsConst(this)->GetPrefixBytes()); }
     const uint8_t *GetPrefixBytes(void) const { return reinterpret_cast<const uint8_t *>(this) + sizeof(*this); }
 
     uint8_t  mPrefixLength;  // The prefix length in bits.
@@ -455,76 +446,226 @@ private:
 static_assert(sizeof(RouteInfoOption) == 8, "invalid RouteInfoOption structure");
 
 /**
- * This class represents a Router Advertisement message.
+ * Represents an RA Flags Extension Option.
  *
+ * See RFC-5175 [https://tools.ietf.org/html/rfc5175]
  */
-class RouterAdvertMessage
+OT_TOOL_PACKED_BEGIN
+class RaFlagsExtOption : public Option, private Clearable<RaFlagsExtOption>
+{
+    friend class Clearable<RaFlagsExtOption>;
+
+public:
+    static constexpr Type kType = kTypeRaFlagsExtension; ///< RA Flags Extension Option type.
+
+    /**
+     * Initializes the RA Flags Extension option with proper type and length and sets all flags to zero.
+     */
+    void Init(void);
+
+    /**
+     * Tells whether this option is valid.
+     *
+     * @returns  A boolean indicates whether this option is valid.
+     */
+    bool IsValid(void) const { return GetSize() >= sizeof(*this); }
+
+    RaFlagsExtOption(void) = delete;
+
+private:
+    // RA Flags Extension Option
+    //
+    //   0                   1                   2                   3
+    //   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    //  |     Type      |    Length     |         Bit fields available ..
+    //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    //  ... for assignment                                              |
+    //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                                .
+
+    uint8_t mFlags[6];
+} OT_TOOL_PACKED_END;
+
+static_assert(sizeof(RaFlagsExtOption) == 8, "invalid RaFlagsExtOption structure");
+
+/**
+ * Defines the ND6 Tx Message.
+ */
+class TxMessage
 {
 public:
     /**
-     * This class implements the RA message header.
+     * Gets the prepared ND6 message as an `Icmp6Packet`.
+     *
+     * @param[out] aPacket   A reference to an `Icmp6Packet`.
+     */
+    void GetAsPacket(Icmp6Packet &aPacket) const { aPacket.Init(mArray.AsCArray(), mArray.GetLength()); }
+
+    /**
+     * Appends bytes from a given buffer to the ND6 message.
+     *
+     * @param[in] aBytes     A pointer to the buffer containing the bytes to append.
+     * @param[in] aLength    The buffer length.
+     *
+     * @retval kErrorNone    Bytes are appended successfully.
+     * @retval kErrorNoBufs  Insufficient available buffers to grow the message.
+     */
+    Error AppendBytes(const uint8_t *aBytes, uint16_t aLength);
+
+    /**
+     * Appends a Source/Target Link Layer Address Option to the ND6 message.
+     *
+     * @param[in] aLinkLayerAddress    The AIL Layer Address.
+     * @param[in] aType                The type of Link Layer Address Option, Source or Target
+     *
+     * @retval kErrorNone    Option is appended successfully.
+     * @retval kErrorNoBufs  Insufficient available buffers to grow the message.
+     */
+    Error AppendLinkLayerOption(LinkLayerAddress &aLinkLayerAddress, Option::Type aType);
+
+    /**
+     * Appends an object to the ND6 message.
+     *
+     * @tparam    ObjectType   The object type to append to the message.
+     *
+     * @param[in] aObject      A reference to the object to append to the message.
+     *
+     * @retval kErrorNone      Successfully appended the object.
+     * @retval kErrorNoBufs    Insufficient available buffers to grow the message.
+     */
+    template <typename ObjectType> Error Append(const ObjectType &aObject)
+    {
+        static_assert(!TypeTraits::IsPointer<ObjectType>::kValue, "ObjectType must not be a pointer");
+
+        return AppendBytes(reinterpret_cast<const uint8_t *>(&aObject), sizeof(ObjectType));
+    }
+
+protected:
+    static constexpr uint16_t kCapacityIncrement = 256;
+
+    Option *AppendOption(uint16_t aOptionSize);
+
+    Heap::Array<uint8_t, kCapacityIncrement> mArray;
+};
+
+/**
+ * Defines Router Advertisement components.
+ */
+class RouterAdvert
+{
+public:
+    /**
+     * Represent an RA message header.
      *
      * See section 2.2 of RFC 4191 [https://datatracker.ietf.org/doc/html/rfc4191]
-     *
      */
     OT_TOOL_PACKED_BEGIN
-    class Header : public Equatable<Header>, private Clearable<Header>
+    class Header : public Equatable<Header>, public Clearable<Header>
     {
+        friend class Clearable<Header>;
+
     public:
         /**
-         * This constructor initializes the Router Advertisement message with
+         * Initializes the Router Advertisement message with
          * zero router lifetime, reachable time and retransmission timer.
-         *
          */
         Header(void) { SetToDefault(); }
 
         /**
-         * This method sets the RA message to default values.
+         * Indicates whether the header is valid by checking the type field to match Router Advertisement ICMPv6 type.
          *
+         * @retval TRUE  The header is valid.
+         * @retval FALSE The header is not valid.
+         */
+        bool IsValid(void) const { return GetType() == Icmp::Header::kTypeRouterAdvert; }
+
+        /**
+         * Sets the RA message to default values.
          */
         void SetToDefault(void);
 
         /**
-         * This method sets the checksum value.
+         * Sets the checksum value.
          *
          * @param[in]  aChecksum  The checksum value.
-         *
          */
-        void SetChecksum(uint16_t aChecksum) { mChecksum = HostSwap16(aChecksum); }
+        void SetChecksum(uint16_t aChecksum) { mChecksum = BigEndian::HostSwap16(aChecksum); }
 
         /**
-         * This method sets the Router Lifetime in seconds.
+         * Sets the Router Lifetime in seconds.
          *
          * @param[in]  aRouterLifetime  The router lifetime in seconds.
-         *
          */
-        void SetRouterLifetime(uint16_t aRouterLifetime) { mRouterLifetime = HostSwap16(aRouterLifetime); }
+        void SetRouterLifetime(uint16_t aRouterLifetime) { mRouterLifetime = BigEndian::HostSwap16(aRouterLifetime); }
 
         /**
-         * This method gets the Router Lifetime (in seconds).
+         * Gets the Router Lifetime (in seconds).
          *
          * Router Lifetime set to zero indicates that the sender is not a default router.
          *
          * @returns  The router lifetime in seconds.
-         *
          */
-        uint16_t GetRouterLifetime(void) const { return HostSwap16(mRouterLifetime); }
+        uint16_t GetRouterLifetime(void) const { return BigEndian::HostSwap16(mRouterLifetime); }
 
         /**
-         * This method sets the default router preference.
+         * Sets the default router preference.
          *
          * @param[in]  aPreference  The router preference.
-         *
          */
         void SetDefaultRouterPreference(RoutePreference aPreference);
 
         /**
-         * This method gets the default router preference.
+         * Gets the default router preference.
          *
          * @returns  The router preference.
-         *
          */
         RoutePreference GetDefaultRouterPreference(void) const;
+
+        /**
+         * Indicates whether or not the Managed Address Config Flag is set in the RA message header.
+         *
+         * @retval TRUE   The Managed Address Config Flag is set.
+         * @retval FALSE  The Managed Address Config Flag is not set.
+         */
+        bool IsManagedAddressConfigFlagSet(void) const { return (mFlags & kManagedAddressConfigFlag) != 0; }
+
+        /**
+         * Sets the Managed Address Config Flag in the RA message.
+         */
+        void SetManagedAddressConfigFlag(void) { mFlags |= kManagedAddressConfigFlag; }
+
+        /**
+         * Indicates whether or not the Other Config Flag is set in the RA message header.
+         *
+         * @retval TRUE   The Other Config Flag is set.
+         * @retval FALSE  The Other Config Flag is not set.
+         */
+        bool IsOtherConfigFlagSet(void) const { return (mFlags & kOtherConfigFlag) != 0; }
+
+        /**
+         * Sets the Other Config Flag in the RA message.
+         */
+        void SetOtherConfigFlag(void) { mFlags |= kOtherConfigFlag; }
+
+        /**
+         * Indicates whether or not the SNAC Router Flag is set in the RA message header.
+         *
+         * @retval TRUE   The SNAC Router Flag is set.
+         * @retval FALSE  The SNAC Router Flag is not set.
+         */
+        bool IsSnacRouterFlagSet(void) const { return (mFlags & kSnacRouterFlag) != 0; }
+
+        /**
+         * Sets the SNAC Router Flag in the RA message header.
+         */
+        void SetSnacRouterFlag(void) { mFlags |= kSnacRouterFlag; }
+
+        /**
+         * This method returns the ICMPv6 message type.
+         *
+         * @returns The ICMPv6 message type.
+         */
+        Icmp::Header::Type GetType(void) const { return static_cast<Icmp::Header::Type>(mType); }
 
     private:
         // Router Advertisement Message
@@ -534,7 +675,7 @@ public:
         //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
         //  |     Type      |     Code      |          Checksum             |
         //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-        //  | Cur Hop Limit |M|O|H|Prf|Resvd|       Router Lifetime         |
+        //  | Cur Hop Limit |M|O| |Prf| |S| |       Router Lifetime         |
         //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
         //  |                         Reachable Time                        |
         //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -543,8 +684,11 @@ public:
         //  |   Options ...
         //  +-+-+-+-+-+-+-+-+-+-+-+-
 
-        static constexpr uint8_t kPreferenceOffset = 3;
-        static constexpr uint8_t kPreferenceMask   = 3 << kPreferenceOffset;
+        static constexpr uint8_t kManagedAddressConfigFlag = 1 << 7;
+        static constexpr uint8_t kOtherConfigFlag          = 1 << 6;
+        static constexpr uint8_t kSnacRouterFlag           = 1 << 1;
+        static constexpr uint8_t kPreferenceOffset         = 3;
+        static constexpr uint8_t kPreferenceMask           = 3 << kPreferenceOffset;
 
         uint8_t  mType;
         uint8_t  mCode;
@@ -558,142 +702,320 @@ public:
 
     static_assert(sizeof(Header) == 16, "Invalid RA `Header`");
 
-    typedef Data<kWithUint16Length> Icmp6Packet; ///< A data buffer containing an ICMPv6 packet.
-
     /**
-     * This constructor initializes the RA message from a received packet data buffer.
-     *
-     * @param[in] aPacket   A received packet data.
-     *
+     * Represents a received RA message.
      */
-    explicit RouterAdvertMessage(const Icmp6Packet &aPacket)
-        : mData(aPacket)
-        , mMaxLength(0)
+    class RxMessage
     {
-    }
+    public:
+        /**
+         * Initializes the RA message from a received packet data buffer.
+         *
+         * @param[in] aPacket   A received packet data.
+         */
+        explicit RxMessage(const Icmp6Packet &aPacket)
+            : mData(aPacket)
+        {
+        }
+
+        /**
+         * Gets the RA message as an `Icmp6Packet`.
+         *
+         * @returns The RA message as an `Icmp6Packet`.
+         */
+        const Icmp6Packet &GetAsPacket(void) const { return mData; }
+
+        /**
+         * Indicates whether or not the received RA message is valid.
+         *
+         * @retval TRUE   If the RA message is valid.
+         * @retval FALSE  If the RA message is not valid.
+         */
+        bool IsValid(void) const
+        {
+            return (mData.GetBytes() != nullptr) && (mData.GetLength() >= sizeof(Header)) &&
+                   (GetHeader().GetType() == Icmp::Header::kTypeRouterAdvert);
+        }
+
+        /**
+         * Gets the RA message's header.
+         *
+         * @returns The RA message's header.
+         */
+        const Header &GetHeader(void) const { return *reinterpret_cast<const Header *>(mData.GetBytes()); }
+
+        /**
+         * Indicates whether or not the received RA message contains any options.
+         *
+         * @retval TRUE   If the RA message contains at least one option.
+         * @retval FALSE  If the RA message contains no options.
+         */
+        bool ContainsAnyOptions(void) const { return (mData.GetLength() > sizeof(Header)); }
+
+        /**
+         * Returns pointer to the start of option bytes (after header).
+         *
+         * @returns Pointer to start of options.
+         */
+        const uint8_t *GetOptionStart(void) const { return (mData.GetBytes() + sizeof(Header)); }
+
+        /**
+         * Gets the length (number of bytes) of options.
+         *
+         * @returns Number of bytes after header specifying RA options.
+         */
+        uint16_t GetOptionLength(void) const { return ContainsAnyOptions() ? mData.GetLength() - sizeof(Header) : 0; }
+
+        // The following methods are intended to support range-based `for`
+        // loop iteration over `Option`s in the RA message.
+
+        Option::Iterator begin(void) const { return Option::Iterator(GetOptionStart(), GetDataEnd()); }
+        Option::Iterator end(void) const { return Option::Iterator(); }
+
+    private:
+        const uint8_t *GetDataEnd(void) const { return mData.GetBytes() + mData.GetLength(); }
+
+        Data<kWithUint16Length> mData;
+    };
 
     /**
-     * This template constructor initializes the RA message with a given header using a given buffer to store the RA
-     * message.
-     *
-     * @tparam kBufferSize   The size of the buffer used to store the RA message.
-     *
-     * @param[in] aHeader    The RA message header.
-     * @param[in] aBuffer    The data buffer to store the RA message in.
-     *
+     * Represents an RA message to be sent.
      */
-    template <uint16_t kBufferSize>
-    RouterAdvertMessage(const Header &aHeader, uint8_t (&aBuffer)[kBufferSize])
-        : mMaxLength(kBufferSize)
+    class TxMessage : public ot::Ip6::Nd::TxMessage
     {
-        static_assert(kBufferSize >= sizeof(Header), "Buffer for RA msg is too small");
+    public:
+        /**
+         * Appends a Prefix Info Option to the RA message.
+         *
+         * The appended Prefix Info Option will have both on-link (L) and autonomous address-configuration (A) flags
+         * set.
+         *
+         * @param[in] aPrefix             The prefix.
+         * @param[in] aValidLifetime      The valid lifetime in seconds.
+         * @param[in] aPreferredLifetime  The preferred lifetime in seconds.
+         *
+         * @retval kErrorNone    Option is appended successfully.
+         * @retval kErrorNoBufs  Insufficient available buffers to grow the message.
+         */
+        Error AppendPrefixInfoOption(const Prefix &aPrefix, uint32_t aValidLifetime, uint32_t aPreferredLifetime);
 
-        memcpy(aBuffer, &aHeader, sizeof(Header));
-        mData.Init(aBuffer, sizeof(Header));
-    }
+        /**
+         * Appends a Route Info Option to the RA message.
+         *
+         * @param[in] aPrefix             The prefix.
+         * @param[in] aRouteLifetime      The route lifetime in seconds.
+         * @param[in] aPreference         The route preference.
+         *
+         * @retval kErrorNone    Option is appended successfully.
+         * @retval kErrorNoBufs  Insufficient available buffers to grow the message.
+         */
+        Error AppendRouteInfoOption(const Prefix &aPrefix, uint32_t aRouteLifetime, RoutePreference aPreference);
 
-    /**
-     * This method gets the RA message as an `Icmp6Packet`.
-     *
-     * @returns The RA message as an `Icmp6Packet`.
-     *
-     */
-    const Icmp6Packet &GetAsPacket(void) const { return mData; }
+        /**
+         * Indicates whether or not the received RA message contains any options.
+         *
+         * @retval TRUE   If the RA message contains at least one option.
+         * @retval FALSE  If the RA message contains no options.
+         */
+        bool ContainsAnyOptions(void) const { return (mArray.GetLength() > sizeof(Header)); }
+    };
 
-    /**
-     * This method indicates whether or not the RA message is valid.
-     *
-     * @retval TRUE   If the RA message is valid.
-     * @retval FALSE  If the RA message is not valid.
-     *
-     */
-    bool IsValid(void) const { return (mData.GetBytes() != nullptr) && (mData.GetLength() >= sizeof(Header)); }
-
-    /**
-     * This method gets the RA message's header.
-     *
-     * @returns The RA message's header.
-     *
-     */
-    const Header &GetHeader(void) const { return *reinterpret_cast<const Header *>(mData.GetBytes()); }
-
-    /**
-     * This method appends a Prefix Info Option to the RA message.
-     *
-     * The appended Prefix Info Option will have both on-link (L) and autonomous address-configuration (A) flags set.
-     *
-     * @param[in] aPrefix             The prefix.
-     * @param[in] aValidLifetime      The valid lifetime in seconds.
-     * @param[in] aPreferredLifetime  The preferred lifetime in seconds.
-     *
-     * @retval kErrorNone    Option is appended successfully.
-     * @retval kErrorNoBufs  No more space in the buffer to append the option.
-     *
-     */
-    Error AppendPrefixInfoOption(const Prefix &aPrefix, uint32_t aValidLifetime, uint32_t aPreferredLifetime);
-
-    /**
-     * This method appends a Route Info Option to the RA message.
-     *
-     * @param[in] aPrefix             The prefix.
-     * @param[in] aRouteLifetime      The route lifetime in seconds.
-     * @param[in] aPreference         The route preference.
-     *
-     * @retval kErrorNone    Option is appended successfully.
-     * @retval kErrorNoBufs  No more space in the buffer to append the option.
-     *
-     */
-    Error AppendRouteInfoOption(const Prefix &aPrefix, uint32_t aRouteLifetime, RoutePreference aPreference);
-
-    /**
-     * This method indicates whether or not the RA message contains any options.
-     *
-     * @retval TRUE   If the RA message contains at least one option.
-     * @retval FALSE  If the RA message contains no options.
-     *
-     */
-    bool ContainsAnyOptions(void) const { return (mData.GetLength() > sizeof(Header)); }
-
-    // The following methods are intended to support range-based `for`
-    // loop iteration over `Option`s in the RA message.
-
-    Option::Iterator begin(void) const { return Option::Iterator(GetOptionStart(), GetDataEnd()); }
-    Option::Iterator end(void) const { return Option::Iterator(); }
-
-private:
-    const uint8_t *GetOptionStart(void) const { return (mData.GetBytes() + sizeof(Header)); }
-    const uint8_t *GetDataEnd(void) const { return mData.GetBytes() + mData.GetLength(); }
-    Option *       AppendOption(uint16_t aOptionSize);
-
-    Data<kWithUint16Length> mData;
-    uint16_t                mMaxLength;
+    RouterAdvert(void) = delete;
 };
 
 /**
- * This class implements the Router Solicitation message.
+ * Implements the Router Solicitation message.
  *
  * See section 4.1 of RFC 4861 for definition of this message.
  * https://tools.ietf.org/html/rfc4861#section-4.1
- *
  */
 OT_TOOL_PACKED_BEGIN
-class RouterSolicitMessage
+class RouterSolicitHeader
 {
 public:
     /**
-     * This constructor initializes the Router Solicitation message.
-     *
+     * Initializes the Router Solicitation message.
      */
-    RouterSolicitMessage(void);
+    RouterSolicitHeader(void);
 
 private:
     Icmp::Header mHeader; // The common ICMPv6 header.
 } OT_TOOL_PACKED_END;
 
-static_assert(sizeof(RouterSolicitMessage) == 8, "invalid RouterSolicitMessage structure");
+static_assert(sizeof(RouterSolicitHeader) == 8, "invalid RouterSolicitHeader structure");
+/**
+ * Represents a Neighbor Solicitation (NS) message.
+ */
+OT_TOOL_PACKED_BEGIN
+class NeighborSolicitHeader : public Clearable<NeighborSolicitHeader>
+{
+public:
+    /**
+     * Initializes the Neighbor Solicitation message header.
+     */
+    NeighborSolicitHeader(void);
+
+    /**
+     * Indicates whether the Neighbor Solicitation message is valid (proper Type and Code).
+     *
+     * @retval TRUE  If the message header is valid.
+     * @retval FALSE If the message header is not valid.
+     */
+    bool IsValid(void) const { return (mType == Icmp::Header::kTypeNeighborSolicit) && (mCode == 0); }
+
+    /**
+     * Gets the Target Address field.
+     *
+     * @returns The Target Address.
+     */
+    const Address &GetTargetAddress(void) const { return mTargetAddress; }
+
+    /**
+     * Sets the Target Address field.
+     *
+     * @param[in] aTargetAddress  The Target Address.
+     */
+    void SetTargetAddress(const Address &aTargetAddress) { mTargetAddress = aTargetAddress; }
+
+private:
+    // Neighbor Solicitation Message (RFC 4861)
+    //
+    //   0                   1                   2                   3
+    //   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    //  |     Type      |     Code      |          Checksum             |
+    //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    //  |                           Reserved                            |
+    //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    //  |                                                               |
+    //  +                                                               +
+    //  |                                                               |
+    //  +                       Target Address                          +
+    //  |                                                               |
+    //  +                                                               +
+    //  |                                                               |
+    //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    //  |   Options ...
+    //  +-+-+-+-+-+-+-+-+-+-+-+-
+
+    uint8_t  mType;
+    uint8_t  mCode;
+    uint16_t mChecksum;
+    uint32_t mReserved;
+    Address  mTargetAddress;
+} OT_TOOL_PACKED_END;
+
+static_assert(sizeof(NeighborSolicitHeader) == 24, "Invalid NeighborSolicitHeader definition");
+
+/**
+ * Represents a Neighbor Advertisement (NA) message.
+ */
+OT_TOOL_PACKED_BEGIN
+class NeighborAdvertMessage : public Clearable<NeighborAdvertMessage>
+{
+public:
+    NeighborAdvertMessage(void);
+
+    /**
+     * Indicates whether the Neighbor Advertisement message is valid (proper Type and Code).
+     *
+     * @retval TRUE  If the message is valid.
+     * @retval FALSE If the message is not valid.
+     */
+    bool IsValid(void) const { return (mType == Icmp::Header::kTypeNeighborAdvert) && (mCode == 0); }
+
+    /**
+     * Indicates whether or not the Router Flag is set in the NA message.
+     *
+     * @retval TRUE   The Router Flag is set.
+     * @retval FALSE  The Router Flag is not set.
+     */
+    bool IsRouterFlagSet(void) const { return (mFlags & kRouterFlag) != 0; }
+
+    /**
+     * Sets the Router Flag in the NA message.
+     */
+    void SetRouterFlag(void) { mFlags |= kRouterFlag; }
+
+    /**
+     * Indicates whether or not the Solicited Flag is set in the NA message.
+     *
+     * @retval TRUE   The Solicited Flag is set.
+     * @retval FALSE  The Solicited Flag is not set.
+     */
+    bool IsSolicitedFlagSet(void) const { return (mFlags & kSolicitedFlag) != 0; }
+
+    /**
+     * Sets the Solicited Flag in the NA message.
+     */
+    void SetSolicitedFlag(void) { mFlags |= kSolicitedFlag; }
+
+    /**
+     * Indicates whether or not the Override Flag is set in the NA message.
+     *
+     * @retval TRUE   The Override Flag is set.
+     * @retval FALSE  The Override Flag is not set.
+     */
+    bool IsOverrideFlagSet(void) const { return (mFlags & kOverrideFlag) != 0; }
+
+    /**
+     * Sets the Override Flag in the NA message.
+     */
+    void SetOverrideFlag(void) { mFlags |= kOverrideFlag; }
+
+    /**
+     * Gets the Target Address field.
+     *
+     * @returns The Target Address.
+     */
+    const Address &GetTargetAddress(void) const { return mTargetAddress; }
+
+    /**
+     * Sets the Target Address field.
+     *
+     * @param[in] aTargetAddress  The Target Address.
+     */
+    void SetTargetAddress(const Address &aTargetAddress) { mTargetAddress = aTargetAddress; }
+
+private:
+    // Neighbor Advertisement Message (RFC 4861)
+    //
+    //   0                   1                   2                   3
+    //   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    //  |     Type      |     Code      |          Checksum             |
+    //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    //  |R|S|O|                     Reserved                            |
+    //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    //  |                                                               |
+    //  +                                                               +
+    //  |                                                               |
+    //  +                       Target Address                          +
+    //  |                                                               |
+    //  +                                                               +
+    //  |                                                               |
+    //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    //  |   Options ...
+    //  +-+-+-+-+-+-+-+-+-+-+-+-
+
+    static constexpr uint8_t kRouterFlag    = (1 << 7);
+    static constexpr uint8_t kSolicitedFlag = (1 << 6);
+    static constexpr uint8_t kOverrideFlag  = (1 << 5);
+
+    uint8_t  mType;
+    uint8_t  mCode;
+    uint16_t mChecksum;
+    uint8_t  mFlags;
+    uint8_t  mReserved[3];
+    Address  mTargetAddress;
+} OT_TOOL_PACKED_END;
+
+static_assert(sizeof(NeighborAdvertMessage) == 24, "Invalid NeighborAdvertMessage definition");
 
 } // namespace Nd
 } // namespace Ip6
 } // namespace ot
+
+#endif // OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
 
 #endif // ND6_HPP_

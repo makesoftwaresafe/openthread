@@ -49,7 +49,6 @@
  * @def OPENTHREAD_CONFIG_CLI_UART_RX_BUFFER_SIZE
  *
  * The size of CLI UART RX buffer in bytes.
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_UART_RX_BUFFER_SIZE
 #if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
@@ -63,7 +62,6 @@
  * @def OPENTHREAD_CONFIG_CLI_TX_BUFFER_SIZE
  *
  * The size of CLI message buffer in bytes.
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_UART_TX_BUFFER_SIZE
 #define OPENTHREAD_CONFIG_CLI_UART_TX_BUFFER_SIZE 1024
@@ -106,7 +104,6 @@ uint16_t sSendLength;
 /**
  * Macro to acquire an exclusive lock of uart cli output
  * Default implementation does nothing
- *
  */
 #ifndef OT_CLI_UART_OUTPUT_LOCK
 #define OT_CLI_UART_OUTPUT_LOCK() \
@@ -118,7 +115,6 @@ uint16_t sSendLength;
 /**
  * Macro to release the exclusive lock of uart cli output
  * Default implementation does nothing
- *
  */
 #ifndef OT_CLI_UART_OUTPUT_UNLOCK
 #define OT_CLI_UART_OUTPUT_UNLOCK() \
@@ -137,7 +133,7 @@ static void ReceiveTask(const uint8_t *aBuf, uint16_t aBufLength)
     static const char sEraseString[] = {'\b', ' ', '\b'};
     static const char CRNL[]         = {'\r', '\n'};
     static uint8_t    sLastChar      = '\0';
-    const uint8_t *   end;
+    const uint8_t    *end;
 
     end = aBuf + aBufLength;
 
@@ -368,15 +364,9 @@ exit:
     return rval;
 }
 
-void otPlatUartReceived(const uint8_t *aBuf, uint16_t aBufLength)
-{
-    ReceiveTask(aBuf, aBufLength);
-}
+void otPlatUartReceived(const uint8_t *aBuf, uint16_t aBufLength) { ReceiveTask(aBuf, aBufLength); }
 
-void otPlatUartSendDone(void)
-{
-    SendDoneTask();
-}
+void otPlatUartSendDone(void) { SendDoneTask(); }
 
 extern "C" void otAppCliInit(otInstance *aInstance)
 {

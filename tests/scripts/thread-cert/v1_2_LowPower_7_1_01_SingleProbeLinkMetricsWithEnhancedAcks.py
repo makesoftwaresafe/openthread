@@ -99,7 +99,7 @@ class LowPower_7_1_01(thread_cert.TestCase):
         # ---- L = 0
         # ---- Type/Average Enum = 1 (Exponential Moving Avg)
         # ---- Metrics Enum = 2 (Link Margin)
-        self.nodes[SED_1].link_metrics_mgmt_req_enhanced_ack_based_probing(leader_addr, True, 'm')
+        self.nodes[SED_1].link_metrics_config_req_enhanced_ack_based_probing(leader_addr, True, 'm', mode='async')
         self.simulator.go(5)
 
         # Step 6 - SSED_1 enables IEEE 802.15.4-2015 Enhanced ACK based Probing by sending a Link Metrics Management
@@ -115,7 +115,7 @@ class LowPower_7_1_01(thread_cert.TestCase):
         # ---- Type/Average Enum = 1 (Exponential Moving Avg)
         # ---- Metrics Enum = 2 (Link Margin)
         # ---- Metrics Enum = 3 (RSSI)
-        self.nodes[SSED_1].link_metrics_mgmt_req_enhanced_ack_based_probing(leader_addr, True, 'mr')
+        self.nodes[SSED_1].link_metrics_config_req_enhanced_ack_based_probing(leader_addr, True, 'mr', mode='async')
         self.simulator.go(5)
 
         # Step 8 - SSED_1 sends an MLE Data Message with setting Frame Version subfield within the MAC header of the
@@ -131,7 +131,7 @@ class LowPower_7_1_01(thread_cert.TestCase):
         # Step 12 - SSED_1 clears its Enhanced ACK link metrics configuration by # sending a Link Metrics Management
         # Request to the DUT
         # Enh-ACK Flags = 0 (clear enhanced ACK link metric config)
-        self.nodes[SSED_1].link_metrics_mgmt_req_enhanced_ack_based_probing(leader_addr, False, '')
+        self.nodes[SSED_1].link_metrics_config_req_enhanced_ack_based_probing(leader_addr, False, '', mode='async')
         self.simulator.go(5)
 
         # Step 14 - SSED_1 Sends a MLE Data Message with setting Frame Version subfield within the MAC header of the
@@ -154,7 +154,7 @@ class LowPower_7_1_01(thread_cert.TestCase):
         # ---- Metrics Enum = 1 (Layer 2 LQI)
         # ---- Metrics Enum = 2 (Link Margin)
         # ---- Metrics Enum = 3 (RSSI)
-        self.nodes[SSED_1].link_metrics_mgmt_req_enhanced_ack_based_probing(leader_addr, True, 'qmr')
+        self.nodes[SSED_1].link_metrics_config_req_enhanced_ack_based_probing(leader_addr, True, 'qmr', mode='async')
         self.simulator.go(5)
 
         # Step 18 - This step verifies that Enhanced ACKs cannot be enabled while requesting a reserved Type/Average
@@ -168,7 +168,11 @@ class LowPower_7_1_01(thread_cert.TestCase):
         # ---- L = 0
         # ---- Type/Average Enum = 2 (Reserved)
         # ---- Metrics Enum = 2 (Link Margin)
-        self.nodes[SSED_1].link_metrics_mgmt_req_enhanced_ack_based_probing(leader_addr, True, 'm', 'r')
+        self.nodes[SSED_1].link_metrics_config_req_enhanced_ack_based_probing(leader_addr,
+                                                                              True,
+                                                                              'm',
+                                                                              'r',
+                                                                              mode='async')
         self.simulator.go(5)
 
     def verify(self, pv):
@@ -202,7 +206,7 @@ class LowPower_7_1_01(thread_cert.TestCase):
         pkts.filter_wpan_src64(SED_1) \
             .filter_wpan_dst64(LEADER) \
             .filter_mle_cmd(consts.MLE_LINK_METRICS_MANAGEMENT_REQUEST) \
-            .filter(lambda p: p.mle.tlv.link_sub_tlv == consts.LM_ENHANCED_ACK_CONFIGURATION_SUB_TLV) \
+            .filter(lambda p: consts.LM_ENHANCED_ACK_CONFIGURATION_SUB_TLV in p.mle.tlv.link_sub_tlv) \
             .filter(lambda p: p.mle.tlv.link_enh_ack_flags == consts.LINK_METRICS_ENH_ACK_PROBING_REGISTER) \
             .filter(lambda p: p.mle.tlv.link_requested_type_id_flags == '0a') \
             .must_next()
@@ -231,7 +235,7 @@ class LowPower_7_1_01(thread_cert.TestCase):
         # ---- Metrics Enum = 3 (RSSI)
         pkts.filter_wpan_src64(SSED_1) \
             .filter_mle_cmd(consts.MLE_LINK_METRICS_MANAGEMENT_REQUEST) \
-            .filter(lambda p: p.mle.tlv.link_sub_tlv == consts.LM_ENHANCED_ACK_CONFIGURATION_SUB_TLV) \
+            .filter(lambda p: consts.LM_ENHANCED_ACK_CONFIGURATION_SUB_TLV in p.mle.tlv.link_sub_tlv) \
             .filter(lambda p: p.mle.tlv.link_enh_ack_flags == consts.LINK_METRICS_ENH_ACK_PROBING_REGISTER) \
             .filter(lambda p: p.mle.tlv.link_requested_type_id_flags == '0a0b') \
             .must_next()
@@ -295,7 +299,7 @@ class LowPower_7_1_01(thread_cert.TestCase):
         pkts.filter_wpan_src64(SSED_1) \
             .filter_wpan_dst64(LEADER) \
             .filter_mle_cmd(consts.MLE_LINK_METRICS_MANAGEMENT_REQUEST) \
-            .filter(lambda p: p.mle.tlv.link_sub_tlv == consts.LM_ENHANCED_ACK_CONFIGURATION_SUB_TLV) \
+            .filter(lambda p: consts.LM_ENHANCED_ACK_CONFIGURATION_SUB_TLV in p.mle.tlv.link_sub_tlv) \
             .filter(lambda p: p.mle.tlv.link_enh_ack_flags == consts.LINK_METRICS_ENH_ACK_PROBING_CLEAR) \
             .must_next()
 
@@ -340,7 +344,7 @@ class LowPower_7_1_01(thread_cert.TestCase):
         pkts.filter_wpan_src64(SSED_1) \
             .filter_wpan_dst64(LEADER) \
             .filter_mle_cmd(consts.MLE_LINK_METRICS_MANAGEMENT_REQUEST) \
-            .filter(lambda p: p.mle.tlv.link_sub_tlv == consts.LM_ENHANCED_ACK_CONFIGURATION_SUB_TLV) \
+            .filter(lambda p: consts.LM_ENHANCED_ACK_CONFIGURATION_SUB_TLV in p.mle.tlv.link_sub_tlv) \
             .filter(lambda p: p.mle.tlv.link_enh_ack_flags == consts.LINK_METRICS_ENH_ACK_PROBING_REGISTER) \
             .filter(lambda p: p.mle.tlv.link_requested_type_id_flags == '090a0b') \
             .must_next()
@@ -369,7 +373,7 @@ class LowPower_7_1_01(thread_cert.TestCase):
         pkts.filter_wpan_src64(SSED_1) \
             .filter_wpan_dst64(LEADER) \
             .filter_mle_cmd(consts.MLE_LINK_METRICS_MANAGEMENT_REQUEST) \
-            .filter(lambda p: p.mle.tlv.link_sub_tlv == consts.LM_ENHANCED_ACK_CONFIGURATION_SUB_TLV) \
+            .filter(lambda p: consts.LM_ENHANCED_ACK_CONFIGURATION_SUB_TLV in p.mle.tlv.link_sub_tlv) \
             .filter(lambda p: p.mle.tlv.link_enh_ack_flags == consts.LINK_METRICS_ENH_ACK_PROBING_REGISTER) \
             .filter(lambda p: p.mle.tlv.link_requested_type_id_flags == '12') \
             .must_next()

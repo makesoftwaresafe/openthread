@@ -40,6 +40,24 @@
 namespace ot {
 namespace Cli {
 
+/**
+ * @cli commissioner announce
+ * @code
+ * commissioner announce 0x00050000 2 32 fdde:ad00:beef:0:0:ff:fe00:c00
+ * Done
+ * @endcode
+ * @cparam commissioner announce @ca{mask} @ca{count} @ca{period} @ca{destination}
+ *   * `mask`: Bitmask that identifies channels for sending MLE `Announce` messages.
+ *   * `count`: Number of MLE `Announce` transmissions per channel.
+ *   * `period`: Number of milliseconds between successive MLE `Announce` transmissions.
+ *   * `destination`: Destination IPv6 address for the message. The message may be multicast.
+ * @par
+ * Sends an Announce Begin message.
+ * @note Use this command only after successfully starting the %Commissioner role
+ * with the `commissioner start` command.
+ * @csa{commissioner start}
+ * @sa otCommissionerAnnounceBegin
+ */
 template <> otError Commissioner::Process<Cmd("announce")>(Arg aArgs[])
 {
     otError      error;
@@ -59,6 +77,27 @@ exit:
     return error;
 }
 
+/**
+ * @cli commissioner energy
+ * @code
+ * commissioner energy 0x00050000 2 32 1000 fdde:ad00:beef:0:0:ff:fe00:c00
+ * Done
+ * Energy: 00050000 0 0 0 0
+ * @endcode
+ * @cparam commissioner energy @ca{mask} @ca{count} @ca{period} @ca{scanDuration} @ca{destination}
+ *   * `mask`: Bitmask that identifies channels for performing IEEE 802.15.4 energy scans.
+ *   * `count`: Number of IEEE 802.15.4 energy scans per channel.
+ *   * `period`: Number of milliseconds between successive IEEE 802.15.4 energy scans.
+ *   * `scanDuration`: Scan duration in milliseconds to use when
+ *     performing an IEEE 802.15.4 energy scan.
+ *   * `destination`: Destination IPv6 address for the message. The message may be multicast.
+ * @par
+ * Sends an Energy Scan Query message. Command output is printed as it is received.
+ * @note Use this command only after successfully starting the %Commissioner role
+ * with the `commissioner start` command.
+ * @csa{commissioner start}
+ * @sa otCommissionerEnergyScan
+ */
 template <> otError Commissioner::Process<Cmd("energy")>(Arg aArgs[])
 {
     otError      error;
@@ -88,6 +127,20 @@ template <> otError Commissioner::Process<Cmd("joiner")>(Arg aArgs[])
     const otExtAddress *addrPtr = nullptr;
     otJoinerDiscerner   discerner;
 
+    /**
+     * @cli commissioner joiner table
+     * @code
+     * commissioner joiner table
+     * | ID                    | PSKd                             | Expiration |
+     * +-----------------------+----------------------------------+------------+
+     * |                     * |                           J01NME |      81015 |
+     * |      d45e64fa83f81cf7 |                           J01NME |     101204 |
+     * | 0x0000000000000abc/12 |                           J01NME |     114360 |
+     * Done
+     * @endcode
+     * @par
+     * Lists all %Joiner entries in table format.
+     */
     if (aArgs[0] == "table")
     {
         uint16_t     iter = 0;
@@ -117,13 +170,15 @@ template <> otError Commissioner::Process<Cmd("joiner")>(Arg aArgs[])
                 break;
 
             case OT_JOINER_INFO_TYPE_DISCERNER:
-                OutputFormat("| 0x%016llx/%2u", static_cast<unsigned long long>(joinerInfo.mSharedId.mDiscerner.mValue),
+                OutputFormat("| 0x%08lx%08lx/%2u",
+                             static_cast<unsigned long>(joinerInfo.mSharedId.mDiscerner.mValue >> 32),
+                             static_cast<unsigned long>(joinerInfo.mSharedId.mDiscerner.mValue & 0xffffffff),
                              joinerInfo.mSharedId.mDiscerner.mLength);
                 break;
             }
 
-            OutputFormat(" | %32s | %10d |", joinerInfo.mPskd.m8, joinerInfo.mExpirationTime);
-            OutputLine("");
+            OutputFormat(" | %32s | %10lu |", joinerInfo.mPskd.m8, ToUlong(joinerInfo.mExpirationTime));
+            OutputNewLine();
         }
 
         ExitNow(error = OT_ERROR_NONE);
@@ -131,7 +186,7 @@ template <> otError Commissioner::Process<Cmd("joiner")>(Arg aArgs[])
 
     VerifyOrExit(!aArgs[1].IsEmpty(), error = OT_ERROR_INVALID_ARGS);
 
-    memset(&discerner, 0, sizeof(discerner));
+    ClearAllBytes(discerner);
 
     if (aArgs[1] == "*")
     {
@@ -139,7 +194,7 @@ template <> otError Commissioner::Process<Cmd("joiner")>(Arg aArgs[])
     }
     else
     {
-        error = Interpreter::ParseJoinerDiscerner(aArgs[1], discerner);
+        error = ParseJoinerDiscerner(aArgs[1], discerner);
 
         if (error == OT_ERROR_NOT_FOUND)
         {
@@ -150,6 +205,29 @@ template <> otError Commissioner::Process<Cmd("joiner")>(Arg aArgs[])
         SuccessOrExit(error);
     }
 
+    /**
+     * @cli commissioner joiner add
+     * @code
+     * commissioner joiner add d45e64fa83f81cf7 J01NME
+     * Done
+     * @endcode
+     * @code
+     * commissioner joiner add 0xabc/12 J01NME
+     * Done
+     * @endcode
+     * @cparam commissioner joiner add @ca{eui64}|@ca{discerner pksd} [@ca{timeout}]
+     *   * `eui64`: IEEE EUI-64 of the %Joiner. To match any joiner, use `*`.
+     *   * `discerner`: The %Joiner discerner in the format `number/length`.
+     *   * `pksd`: Pre-Shared Key for the joiner.
+     *   * `timeout`: The %Joiner timeout in seconds.
+     * @par
+     * Adds a joiner entry.
+     * @note Use this command only after successfully starting the %Commissioner role
+     * with the `commissioner start` command.
+     * @csa{commissioner start}
+     * @sa otCommissionerAddJoiner
+     * @sa otCommissionerAddJoinerWithDiscerner
+     */
     if (aArgs[0] == "add")
     {
         uint32_t timeout = kDefaultJoinerTimeout;
@@ -169,6 +247,27 @@ template <> otError Commissioner::Process<Cmd("joiner")>(Arg aArgs[])
         {
             error = otCommissionerAddJoiner(GetInstancePtr(), addrPtr, aArgs[2].GetCString(), timeout);
         }
+        /**
+         * @cli commissioner joiner remove
+         * @code
+         * commissioner joiner remove d45e64fa83f81cf7
+         * Done
+         * @endcode
+         * @code
+         * commissioner joiner remove 0xabc/12
+         * Done
+         * @endcode
+         * @cparam commissioner joiner remove @ca{eui64}|@ca{discerner}
+         *   * `eui64`: IEEE EUI-64 of the joiner. To match any joiner, use `*`.
+         *   * `discerner`: The joiner discerner in the format `number/length`.
+         * @par
+         * Removes a %Joiner entry.
+         * @note Use this command only after successfully starting the %Commissioner role
+         * with the `commissioner start` command.
+         * @csa{commissioner start}
+         * @sa otCommissionerRemoveJoiner
+         * @sa otCommissionerRemoveJoinerWithDiscerner
+         */
     }
     else if (aArgs[0] == "remove")
     {
@@ -190,6 +289,25 @@ exit:
     return error;
 }
 
+/**
+ * @cli commissioner mgmtget
+ * @code
+ * commissioner mgmtget locator sessionid
+ * Done
+ * @endcode
+ * @cparam commissioner mgmtget [locator] [sessionid] <!--
+ * -->                          [steeringdata] [joinerudpport] <!--
+ * -->                          [-x @ca{TLVs}]
+ *   * `locator`: Border Router RLOC16.
+ *   * `sessionid`: Session ID of the %Commissioner.
+ *   * `steeringdata`: Steering data.
+ *   * `joinerudpport`: %Joiner UDP port.
+ *   * `TLVs`: The set of TLVs to be retrieved.
+ * @par
+ * Sends a `MGMT_GET` (Management Get) message to the Leader.
+ * Variable values that have been set using the `commissioner mgmtset` command are returned.
+ * @sa otCommissionerSendMgmtGet
+ */
 template <> otError Commissioner::Process<Cmd("mgmtget")>(Arg aArgs[])
 {
     otError error = OT_ERROR_NONE;
@@ -237,6 +355,25 @@ exit:
     return error;
 }
 
+/**
+ * @cli commissioner mgmtset
+ * @code
+ * commissioner mgmtset joinerudpport 9988
+ * Done
+ * @endcode
+ * @cparam commissioner mgmtset [locator @ca{locator}] [sessionid @ca{sessionid}] <!--
+ * -->                          [steeringdata @ca{steeringdata}] [joinerudpport @ca{joinerudpport}] <!--
+ * -->                          [-x @ca{TLVs}]
+ *   * `locator`: Border Router RLOC16.
+ *   * `sessionid`: Session ID of the %Commissioner.
+ *   * `steeringdata`: Steering data.
+ *   * `joinerudpport`: %Joiner UDP port.
+ *   * `TLVs`: The set of TLVs to be retrieved.
+ * @par
+ * Sends a `MGMT_SET` (Management Set) message to the Leader, and sets the
+ * variables to the values specified.
+ * @sa otCommissionerSendMgmtSet
+ */
 template <> otError Commissioner::Process<Cmd("mgmtset")>(Arg aArgs[])
 {
     otError                error;
@@ -246,7 +383,7 @@ template <> otError Commissioner::Process<Cmd("mgmtset")>(Arg aArgs[])
 
     VerifyOrExit(!aArgs[0].IsEmpty(), error = OT_ERROR_INVALID_ARGS);
 
-    memset(&dataset, 0, sizeof(dataset));
+    ClearAllBytes(dataset);
 
     for (; !aArgs->IsEmpty(); aArgs++)
     {
@@ -299,6 +436,25 @@ exit:
     return error;
 }
 
+/**
+ * @cli commissioner panid
+ * @code
+ * commissioner panid 0xdead 0x7fff800 fdde:ad00:beef:0:0:ff:fe00:c00
+ * Done
+ * Conflict: dead, 00000800
+ * @endcode
+ * @cparam commissioner panid @ca{panid} @ca{mask} @ca{destination}
+ *   * `paind`: PAN ID to use to check for conflicts.
+ *   * `mask`; Bitmask that identifies channels to perform IEEE 802.15.4
+ *     Active Scans.
+ *   * `destination`: IPv6 destination address for the message. The message may be multicast.
+ * @par
+ * Sends a PAN ID query. Command output is returned as it is received.
+ * @note Use this command only after successfully starting the %Commissioner role
+ * with the `commissioner start` command.
+ * @csa{commissioner start}
+ * @sa otCommissionerPanIdQuery
+ */
 template <> otError Commissioner::Process<Cmd("panid")>(Arg aArgs[])
 {
     otError      error;
@@ -316,6 +472,17 @@ exit:
     return error;
 }
 
+/**
+ * @cli commissioner provisioningurl
+ * @code
+ * commissioner provisioningurl http://github.com/openthread/openthread
+ * Done
+ * @endcode
+ * @cparam commissioner provisioningurl @ca{provisioningurl}
+ * @par
+ * Sets the %Commissioner provisioning URL.
+ * @sa otCommissionerSetProvisioningUrl
+ */
 template <> otError Commissioner::Process<Cmd("provisioningurl")>(Arg aArgs[])
 {
     // If aArgs[0] is empty, `GetCString() will return `nullptr`
@@ -323,6 +490,17 @@ template <> otError Commissioner::Process<Cmd("provisioningurl")>(Arg aArgs[])
     return otCommissionerSetProvisioningUrl(GetInstancePtr(), aArgs[0].GetCString());
 }
 
+/**
+ * @cli commissioner sessionid
+ * @code
+ * commissioner sessionid
+ * 0
+ * Done
+ * @endcode
+ * @par
+ * Gets the current %Commissioner session ID.
+ * @sa otCommissionerGetSessionId
+ */
 template <> otError Commissioner::Process<Cmd("sessionid")>(Arg aArgs[])
 {
     OT_UNUSED_VARIABLE(aArgs);
@@ -332,6 +510,22 @@ template <> otError Commissioner::Process<Cmd("sessionid")>(Arg aArgs[])
     return OT_ERROR_NONE;
 }
 
+/**
+ * @cli commissioner id (get,set)
+ * @code
+ * commissioner id OpenThread Commissioner
+ * Done
+ * @endcode
+ * @code
+ * commissioner id
+ * OpenThread Commissioner
+ * Done
+ * @endcode
+ * @cparam commissioner id @ca{name}
+ * @par
+ * Gets or sets the OpenThread %Commissioner ID name.
+ * @sa otCommissionerSetId
+ */
 template <> otError Commissioner::Process<Cmd("id")>(Arg aArgs[])
 {
     otError error;
@@ -349,6 +543,20 @@ template <> otError Commissioner::Process<Cmd("id")>(Arg aArgs[])
     return error;
 }
 
+/**
+ * @cli commissioner start
+ * @code
+ * commissioner start
+ * Commissioner: petitioning
+ * Done
+ * Commissioner: active
+ * @endcode
+ * @par
+ * Starts the Thread %Commissioner role.
+ * @note The `commissioner` commands are available only when
+ * `OPENTHREAD_CONFIG_COMMISSIONER_ENABLE` and `OPENTHREAD_FTD` are set.
+ * @sa otCommissionerStart
+ */
 template <> otError Commissioner::Process<Cmd("start")>(Arg aArgs[])
 {
     OT_UNUSED_VARIABLE(aArgs);
@@ -383,16 +591,16 @@ const char *Commissioner::StateToString(otCommissionerState aState)
 }
 
 void Commissioner::HandleJoinerEvent(otCommissionerJoinerEvent aEvent,
-                                     const otJoinerInfo *      aJoinerInfo,
-                                     const otExtAddress *      aJoinerId,
-                                     void *                    aContext)
+                                     const otJoinerInfo       *aJoinerInfo,
+                                     const otExtAddress       *aJoinerId,
+                                     void                     *aContext)
 {
     static_cast<Commissioner *>(aContext)->HandleJoinerEvent(aEvent, aJoinerInfo, aJoinerId);
 }
 
 void Commissioner::HandleJoinerEvent(otCommissionerJoinerEvent aEvent,
-                                     const otJoinerInfo *      aJoinerInfo,
-                                     const otExtAddress *      aJoinerId)
+                                     const otJoinerInfo       *aJoinerInfo,
+                                     const otExtAddress       *aJoinerId)
 {
     static const char *const kEventStrings[] = {
         "start",    // (0) OT_COMMISSIONER_JOINER_START
@@ -417,9 +625,19 @@ void Commissioner::HandleJoinerEvent(otCommissionerJoinerEvent aEvent,
         OutputExtAddress(*aJoinerId);
     }
 
-    OutputLine("");
+    OutputNewLine();
 }
 
+/**
+ * @cli commissioner stop
+ * @code
+ * commissioner stop
+ * Done
+ * @endcode
+ * @par
+ * Stops the Thread %Commissioner role.
+ * @sa otCommissionerStop
+ */
 template <> otError Commissioner::Process<Cmd("stop")>(Arg aArgs[])
 {
     OT_UNUSED_VARIABLE(aArgs);
@@ -427,11 +645,23 @@ template <> otError Commissioner::Process<Cmd("stop")>(Arg aArgs[])
     return otCommissionerStop(GetInstancePtr());
 }
 
+/**
+ * @cli commissioner state
+ * @code
+ * commissioner state
+ * active
+ * Done
+ * @endcode
+ * @par
+ * Returns the current state of the %Commissioner. Possible values are
+ * `active`, `disabled`, or `petition` (petitioning to become %Commissioner).
+ * @sa otCommissionerState
+ */
 template <> otError Commissioner::Process<Cmd("state")>(Arg aArgs[])
 {
     OT_UNUSED_VARIABLE(aArgs);
 
-    OutputLine(StateToString(otCommissionerGetState(GetInstancePtr())));
+    OutputLine("%s", StateToString(otCommissionerGetState(GetInstancePtr())));
 
     return OT_ERROR_NONE;
 }
@@ -474,21 +704,21 @@ exit:
 void Commissioner::HandleEnergyReport(uint32_t       aChannelMask,
                                       const uint8_t *aEnergyList,
                                       uint8_t        aEnergyListLength,
-                                      void *         aContext)
+                                      void          *aContext)
 {
     static_cast<Commissioner *>(aContext)->HandleEnergyReport(aChannelMask, aEnergyList, aEnergyListLength);
 }
 
 void Commissioner::HandleEnergyReport(uint32_t aChannelMask, const uint8_t *aEnergyList, uint8_t aEnergyListLength)
 {
-    OutputFormat("Energy: %08x ", aChannelMask);
+    OutputFormat("Energy: %08lx ", ToUlong(aChannelMask));
 
     for (uint8_t i = 0; i < aEnergyListLength; i++)
     {
         OutputFormat("%d ", static_cast<int8_t>(aEnergyList[i]));
     }
 
-    OutputLine("");
+    OutputNewLine();
 }
 
 void Commissioner::HandlePanIdConflict(uint16_t aPanId, uint32_t aChannelMask, void *aContext)
@@ -498,7 +728,7 @@ void Commissioner::HandlePanIdConflict(uint16_t aPanId, uint32_t aChannelMask, v
 
 void Commissioner::HandlePanIdConflict(uint16_t aPanId, uint32_t aChannelMask)
 {
-    OutputLine("Conflict: %04x, %08x", aPanId, aChannelMask);
+    OutputLine("Conflict: %04x, %08lx", aPanId, ToUlong(aChannelMask));
 }
 
 } // namespace Cli

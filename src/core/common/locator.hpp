@@ -55,11 +55,10 @@ extern uint64_t gInstanceRaw[];
  *   This module includes definitions for OpenThread instance locator.
  *
  * @{
- *
  */
 
 /**
- * This template class implements `Get<Type>()` method for different `Type` objects belonging to the OpenThread
+ * Implements `Get<Type>()` method for different `Type` objects belonging to the OpenThread
  * instance.
  *
  * Users of this class MUST follow CRTP-style inheritance, i.e., the class `Class` itself should publicly inherit
@@ -68,13 +67,12 @@ extern uint64_t gInstanceRaw[];
  * @tparam InstanceGetProvider   The template sub-lass used in CRTP style inheritance.
  *                               `InstanceGetProvider` MUST provide a method with the following signature:
  *                               `Instance &GetInstance(void) const`
- *
  */
 template <class InstanceGetProvider> class GetProvider
 {
 public:
     /**
-     * This template method returns a reference to a given `Type` object belonging to the OpenThread instance.
+     * Returns a reference to a given `Type` object belonging to the OpenThread instance.
      *
      * For example, `Get<MeshForwarder>()` returns a reference to the `MeshForwarder` object of the instance.
      *
@@ -82,7 +80,6 @@ public:
      * `Instance` through the member variable property hierarchy.
      *
      * @returns A reference to the `Type` object of the instance.
-     *
      */
     template <typename Type> inline Type &Get(void) const; // Implemented in `locator_getters.hpp`.
 
@@ -91,7 +88,7 @@ protected:
 };
 
 /**
- * This class implements a locator for an OpenThread Instance object.
+ * Implements a locator for an OpenThread Instance object.
  *
  * The `InstanceLocator` is used as base class of almost all other OpenThread classes. It provides a way for an object
  * to get to its owning/parent OpenThread `Instance` and also any other `Type` within the `Instance` member variable
@@ -99,7 +96,6 @@ protected:
  *
  * If multiple-instance feature is supported, the owning/parent OpenThread `Instance` is tracked as a reference. In the
  * single-instance case, this class becomes an empty base class.
- *
  */
 class InstanceLocator : public GetProvider<InstanceLocator>
 {
@@ -107,10 +103,9 @@ class InstanceLocator : public GetProvider<InstanceLocator>
 
 public:
     /**
-     * This method returns a reference to the parent OpenThread Instance.
+     * Returns a reference to the parent OpenThread Instance.
      *
      * @returns A reference to the parent otInstance.
-     *
      */
 #if OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE
     Instance &GetInstance(void) const { return *mInstance; }
@@ -120,10 +115,9 @@ public:
 
 protected:
     /**
-     * This constructor initializes the object.
+     * Initializes the object.
      *
      * @param[in]  aInstance  A reference to the OpenThread Instance.
-     *
      */
     explicit InstanceLocator(Instance &aInstance)
 #if OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE
@@ -142,7 +136,7 @@ private:
 };
 
 /**
- * This class implements a locator for an OpenThread Instance object.
+ * Implements a locator for an OpenThread Instance object.
  *
  * The `InstanceLocatorInit` is similar to `InstanceLocator` but provides a default constructor (instead of a
  * parameterized one) and allows an inheriting class to initialize the object (set the OpenThread Instance) post
@@ -152,14 +146,12 @@ private:
  *
  * The inheriting class from `InstanceLocatorInit` should ensure that object is properly initialized after the object
  * is created and more importantly that it is re-initialized when/if it is cleared or reset.
- *
  */
 class InstanceLocatorInit : public InstanceLocator
 {
 protected:
     /**
      * This is the default constructor for the `InstanceLocatorInit` object.
-     *
      */
     InstanceLocatorInit(void)
         : InstanceLocator()
@@ -182,7 +174,6 @@ protected:
 
 /**
  * @}
- *
  */
 
 } // namespace ot

@@ -47,7 +47,7 @@ class SerialNumber
 {
 public:
     /**
-     * This static method indicates whether or not a first serial number is strictly less than a second serial number.
+     * Indicates whether or not a first serial number is strictly less than a second serial number.
      *
      * The comparison takes into account the wrapping of serial number values (similar to RFC-1982). It is semantically
      * equivalent to `aFirst < aSecond`.
@@ -59,7 +59,6 @@ public:
      *
      * @retval TRUE  If @p aFirst is less than @p aSecond.
      * @retval FALSE If @p aFirst is not less than @p aSecond.
-     *
      */
     template <typename UintType> static bool IsLess(UintType aFirst, UintType aSecond)
     {
@@ -74,7 +73,7 @@ public:
     }
 
     /**
-     * This static method indicates whether or not a first serial number is strictly greater than a second serial
+     * Indicates whether or not a first serial number is strictly greater than a second serial
      * number.
      *
      * The comparison takes into account the wrapping of serial number values (similar to RFC-1982). It is semantically
@@ -87,7 +86,6 @@ public:
      *
      * @retval TRUE  If @p aFirst is greater than @p aSecond.
      * @retval FALSE If @p aFirst is not greater than @p aSecond.
-     *
      */
     template <typename UintType> static bool IsGreater(UintType aFirst, UintType aSecond)
     {

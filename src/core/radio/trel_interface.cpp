@@ -34,17 +34,7 @@
 
 #if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
 
-#include <string.h>
-
-#include "common/array.hpp"
-#include "common/as_core_type.hpp"
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/instance.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/string.hpp"
-#include "net/dns_types.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 namespace Trel {
@@ -59,7 +49,7 @@ Interface::Interface(Instance &aInstance)
     , mInitialized(false)
     , mEnabled(false)
     , mFiltered(false)
-    , mRegisterServiceTask(aInstance, HandleRegisterServiceTask)
+    , mRegisterServiceTask(aInstance)
 {
 }
 
@@ -73,6 +63,18 @@ void Interface::Init(void)
     {
         mEnabled = false;
         Enable();
+    }
+}
+
+void Interface::SetEnabled(bool aEnable)
+{
+    if (aEnable)
+    {
+        Enable();
+    }
+    else
+    {
+        Disable();
     }
 }
 
@@ -107,6 +109,16 @@ exit:
     return;
 }
 
+Interface::Peer *Interface::FindPeer(const Mac::ExtAddress &aExtAddress)
+{
+    return mPeerTable.FindMatching(aExtAddress);
+}
+
+void Interface::NotifyPeerSocketAddressDifference(const Ip6::SockAddr &aPeerSockAddr, const Ip6::SockAddr &aRxSockAddr)
+{
+    otPlatTrelNotifyPeerSocketAddressDifference(&GetInstance(), &aPeerSockAddr, &aRxSockAddr);
+}
+
 void Interface::HandleExtAddressChange(void)
 {
     VerifyOrExit(mInitialized && mEnabled);
@@ -125,11 +137,6 @@ void Interface::HandleExtPanIdChange(void)
 
 exit:
     return;
-}
-
-void Interface::HandleRegisterServiceTask(Tasklet &aTasklet)
-{
-    aTasklet.Get<Interface>().RegisterService();
 }
 
 void Interface::RegisterService(void)
@@ -178,7 +185,7 @@ exit:
 
 void Interface::HandleDiscoveredPeerInfo(const Peer::Info &aInfo)
 {
-    Peer *                 entry;
+    Peer                  *entry;
     Mac::ExtAddress        extAddress;
     MeshCoP::ExtendedPanId extPanId;
     bool                   isNew = false;
@@ -191,7 +198,7 @@ void Interface::HandleDiscoveredPeerInfo(const Peer::Info &aInfo)
 
     if (aInfo.IsRemoved())
     {
-        entry = mPeerTable.FindMatching(extAddress);
+        entry = FindPeer(extAddress);
         VerifyOrExit(entry != nullptr);
         RemovePeerEntry(*entry);
         ExitNow();
@@ -239,8 +246,8 @@ exit:
     return;
 }
 
-Error Interface::ParsePeerInfoTxtData(const Peer::Info &      aInfo,
-                                      Mac::ExtAddress &       aExtAddress,
+Error Interface::ParsePeerInfoTxtData(const Peer::Info       &aInfo,
+                                      Mac::ExtAddress        &aExtAddress,
                                       MeshCoP::ExtendedPanId &aExtPanId) const
 {
     Error                   error;
@@ -255,14 +262,23 @@ Error Interface::ParsePeerInfoTxtData(const Peer::Info &      aInfo,
 
     while ((error = iterator.GetNextEntry(entry)) == kErrorNone)
     {
-        if (strcmp(entry.mKey, kTxtRecordExtAddressKey) == 0)
+        // If the TXT data happens to have entries with key longer
+        // than `kMaxIterKeyLength`, `mKey` would be `nullptr` and full
+        // entry would be placed in `mValue`. We skip over such
+        // entries.
+        if (entry.mKey == nullptr)
+        {
+            continue;
+        }
+
+        if (StringMatch(entry.mKey, kTxtRecordExtAddressKey))
         {
             VerifyOrExit(!parsedExtAddress, error = kErrorParse);
             VerifyOrExit(entry.mValueLength == sizeof(Mac::ExtAddress), error = kErrorParse);
             aExtAddress.Set(entry.mValue);
             parsedExtAddress = true;
         }
-        else if (strcmp(entry.mKey, kTxtRecordExtPanIdKey) == 0)
+        else if (StringMatch(entry.mKey, kTxtRecordExtPanIdKey))
         {
             VerifyOrExit(!parsedExtPanId, error = kErrorParse);
             VerifyOrExit(entry.mValueLength == sizeof(MeshCoP::ExtendedPanId), error = kErrorParse);
@@ -308,15 +324,9 @@ Interface::Peer *Interface::GetNewPeerEntry(void)
         }
 
 #if OPENTHREAD_FTD
+        if (Get<NeighborTable>().FindRxOnlyNeighborRouter(entry.GetExtAddress()) != nullptr)
         {
-            Mac::Address macAddress;
-
-            macAddress.SetExtended(entry.GetExtAddress());
-
-            if (Get<NeighborTable>().FindRxOnlyNeighborRouter(macAddress) != nullptr)
-            {
-                continue;
-            }
+            continue;
         }
 #endif
 
@@ -341,6 +351,10 @@ void Interface::RemovePeerEntry(Peer &aEntry)
 
     mPeerTable.PopBack();
 }
+
+const Counters *Interface::GetCounters(void) const { return otPlatTrelGetCounters(&GetInstance()); }
+
+void Interface::ResetCounters(void) { otPlatTrelResetCounters(&GetInstance()); }
 
 Error Interface::Send(const Packet &aPacket, bool aIsDiscovery)
 {
@@ -376,25 +390,28 @@ exit:
     return error;
 }
 
-extern "C" void otPlatTrelHandleReceived(otInstance *aInstance, uint8_t *aBuffer, uint16_t aLength)
+extern "C" void otPlatTrelHandleReceived(otInstance       *aInstance,
+                                         uint8_t          *aBuffer,
+                                         uint16_t          aLength,
+                                         const otSockAddr *aSenderAddress)
 {
     Instance &instance = AsCoreType(aInstance);
 
     VerifyOrExit(instance.IsInitialized());
-    instance.Get<Interface>().HandleReceived(aBuffer, aLength);
+    instance.Get<Interface>().HandleReceived(aBuffer, aLength, AsCoreType(aSenderAddress));
 
 exit:
     return;
 }
 
-void Interface::HandleReceived(uint8_t *aBuffer, uint16_t aLength)
+void Interface::HandleReceived(uint8_t *aBuffer, uint16_t aLength, const Ip6::SockAddr &aSenderAddr)
 {
     LogDebg("HandleReceived(aLength:%u)", aLength);
 
     VerifyOrExit(mInitialized && mEnabled && !mFiltered);
 
     mRxPacket.Init(aBuffer, aLength);
-    Get<Link>().ProcessReceivedPacket(mRxPacket);
+    Get<Link>().ProcessReceivedPacket(mRxPacket, aSenderAddr);
 
 exit:
     return;

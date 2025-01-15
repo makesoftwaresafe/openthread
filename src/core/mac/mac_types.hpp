@@ -56,37 +56,32 @@ namespace Mac {
  * @addtogroup core-mac
  *
  * @{
- *
  */
 
 /**
- * This type represents the IEEE 802.15.4 PAN ID.
- *
+ * Represents the IEEE 802.15.4 PAN ID.
  */
 typedef otPanId PanId;
 
 constexpr PanId kPanIdBroadcast = 0xffff; ///< Broadcast PAN ID.
 
 /**
- * This type represents the IEEE 802.15.4 Short Address.
- *
+ * Represents the IEEE 802.15.4 Short Address.
  */
 typedef otShortAddress ShortAddress;
 
-constexpr ShortAddress kShortAddrBroadcast = 0xffff; ///< Broadcast Short Address.
-constexpr ShortAddress kShortAddrInvalid   = 0xfffe; ///< Invalid Short Address.
+constexpr ShortAddress kShortAddrBroadcast = OT_RADIO_BROADCAST_SHORT_ADDR; ///< Broadcast Short Address.
+constexpr ShortAddress kShortAddrInvalid   = OT_RADIO_INVALID_SHORT_ADDR;   ///< Invalid Short Address.
 
 /**
- * This function generates a random IEEE 802.15.4 PAN ID.
+ * Generates a random IEEE 802.15.4 PAN ID.
  *
  * @returns A randomly generated IEEE 802.15.4 PAN ID (excluding `kPanIdBroadcast`).
- *
  */
 PanId GenerateRandomPanId(void);
 
 /**
- * This structure represents an IEEE 802.15.4 Extended Address.
- *
+ * Represents an IEEE 802.15.4 Extended Address.
  */
 OT_TOOL_PACKED_BEGIN
 class ExtAddress : public otExtAddress, public Equatable<ExtAddress>, public Clearable<ExtAddress>
@@ -95,14 +90,12 @@ public:
     static constexpr uint16_t kInfoStringSize = 17; ///< Max chars for the info string (`ToString()`).
 
     /**
-     * This type defines the fixed-length `String` object returned from `ToString()`.
-     *
+     * Defines the fixed-length `String` object returned from `ToString()`.
      */
     typedef String<kInfoStringSize> InfoString;
 
     /**
-     * This enumeration type specifies the copy byte order when Extended Address is being copied to/from a buffer.
-     *
+     * Type specifies the copy byte order when Extended Address is being copied to/from a buffer.
      */
     enum CopyByteOrder : uint8_t
     {
@@ -111,26 +104,23 @@ public:
     };
 
     /**
-     * This method fills all bytes of address with a given byte value.
+     * Fills all bytes of address with a given byte value.
      *
      * @param[in] aByte A byte value to fill address with.
-     *
      */
     void Fill(uint8_t aByte) { memset(this, aByte, sizeof(*this)); }
 
     /**
-     * This method generates a random IEEE 802.15.4 Extended Address.
-     *
+     * Generates a random IEEE 802.15.4 Extended Address.
      */
     void GenerateRandom(void);
 
     /**
-     * This method sets the Extended Address from a given byte array.
+     * Sets the Extended Address from a given byte array.
      *
      * @param[in] aBuffer    Pointer to an array containing the Extended Address. `OT_EXT_ADDRESS_SIZE` bytes from
      *                       buffer are copied to form the Extended Address.
      * @param[in] aByteOrder The byte order to use when copying the address.
-     *
      */
     void Set(const uint8_t *aBuffer, CopyByteOrder aByteOrder = kNormalByteOrder)
     {
@@ -138,19 +128,17 @@ public:
     }
 
     /**
-     * This method indicates whether or not the Group bit is set.
+     * Indicates whether or not the Group bit is set.
      *
      * @retval TRUE   If the group bit is set.
      * @retval FALSE  If the group bit is not set.
-     *
      */
     bool IsGroup(void) const { return (m8[0] & kGroupFlag) != 0; }
 
     /**
-     * This method sets the Group bit.
+     * Sets the Group bit.
      *
      * @param[in]  aGroup  TRUE if group address, FALSE otherwise.
-     *
      */
     void SetGroup(bool aGroup)
     {
@@ -165,25 +153,22 @@ public:
     }
 
     /**
-     * This method toggles the Group bit.
-     *
+     * Toggles the Group bit.
      */
     void ToggleGroup(void) { m8[0] ^= kGroupFlag; }
 
     /**
-     * This method indicates whether or not the Local bit is set.
+     * Indicates whether or not the Local bit is set.
      *
      * @retval TRUE   If the local bit is set.
      * @retval FALSE  If the local bit is not set.
-     *
      */
     bool IsLocal(void) const { return (m8[0] & kLocalFlag) != 0; }
 
     /**
-     * This method sets the Local bit.
+     * Sets the Local bit.
      *
      * @param[in]  aLocal  TRUE if locally administered, FALSE otherwise.
-     *
      */
     void SetLocal(bool aLocal)
     {
@@ -198,17 +183,15 @@ public:
     }
 
     /**
-     * This method toggles the Local bit.
-     *
+     * Toggles the Local bit.
      */
     void ToggleLocal(void) { m8[0] ^= kLocalFlag; }
 
     /**
-     * This method copies the Extended Address into a given buffer.
+     * Copies the Extended Address into a given buffer.
      *
      * @param[out] aBuffer     A pointer to a buffer to copy the Extended Address into.
      * @param[in]  aByteOrder  The byte order to copy the address.
-     *
      */
     void CopyTo(uint8_t *aBuffer, CopyByteOrder aByteOrder = kNormalByteOrder) const
     {
@@ -216,10 +199,19 @@ public:
     }
 
     /**
-     * This method converts an address to a string.
+     * Overloads operator `==` to evaluate whether or not two `ExtAddress` instances are equal.
+     *
+     * @param[in]  aOther  The other `ExtAddress` instance to compare with.
+     *
+     * @retval TRUE   If the two `ExtAddress` instances are equal.
+     * @retval FALSE  If the two `ExtAddress` instances are not equal.
+     */
+    bool operator==(const ExtAddress &aOther) const;
+
+    /**
+     * Converts an address to a string.
      *
      * @returns An `InfoString` containing the string representation of the Extended Address.
-     *
      */
     InfoString ToString(void) const;
 
@@ -231,21 +223,18 @@ private:
 } OT_TOOL_PACKED_END;
 
 /**
- * This class represents an IEEE 802.15.4 Short or Extended Address.
- *
+ * Represents an IEEE 802.15.4 Short or Extended Address.
  */
 class Address
 {
 public:
     /**
-     * This type defines the fixed-length `String` object returned from `ToString()`.
-     *
+     * Defines the fixed-length `String` object returned from `ToString()`.
      */
     typedef ExtAddress::InfoString InfoString;
 
     /**
-     * This enumeration specifies the IEEE 802.15.4 Address type.
-     *
+     * Specifies the IEEE 802.15.4 Address type.
      */
     enum Type : uint8_t
     {
@@ -255,8 +244,7 @@ public:
     };
 
     /**
-     * This constructor initializes an Address.
-     *
+     * Initializes an Address.
      */
     Address(void)
         : mType(kTypeNone)
@@ -264,82 +252,73 @@ public:
     }
 
     /**
-     * This method gets the address type (Short Address, Extended Address, or none).
+     * Gets the address type (Short Address, Extended Address, or none).
      *
      * @returns The address type.
-     *
      */
     Type GetType(void) const { return mType; }
 
     /**
-     * This method indicates whether or not there is an address.
+     * Indicates whether or not there is an address.
      *
      * @returns TRUE if there is no address (i.e. address type is `kTypeNone`), FALSE otherwise.
-     *
      */
     bool IsNone(void) const { return (mType == kTypeNone); }
 
     /**
-     * This method indicates whether or not the Address is a Short Address.
+     * Indicates whether or not the Address is a Short Address.
      *
      * @returns TRUE if it is a Short Address, FALSE otherwise.
-     *
      */
     bool IsShort(void) const { return (mType == kTypeShort); }
 
     /**
-     * This method indicates whether or not the Address is an Extended Address.
+     * Indicates whether or not the Address is an Extended Address.
      *
      * @returns TRUE if it is an Extended Address, FALSE otherwise.
-     *
      */
     bool IsExtended(void) const { return (mType == kTypeExtended); }
 
     /**
-     * This method gets the address as a Short Address.
+     * Gets the address as a Short Address.
      *
-     * This method MUST be used only if the address type is Short Address.
+     * MUST be used only if the address type is Short Address.
      *
      * @returns The Short Address.
-     *
      */
     ShortAddress GetShort(void) const { return mShared.mShortAddress; }
 
     /**
-     * This method gets the address as an Extended Address.
+     * Gets the address as an Extended Address.
      *
-     * This method MUST be used only if the address type is Extended Address.
+     * MUST be used only if the address type is Extended Address.
      *
      * @returns A constant reference to the Extended Address.
-     *
      */
     const ExtAddress &GetExtended(void) const { return mShared.mExtAddress; }
 
     /**
-     * This method gets the address as an Extended Address.
+     * Gets the address as an Extended Address.
      *
-     * This method MUST be used only if the address type is Extended Address.
+     * MUST be used only if the address type is Extended Address.
      *
      * @returns A reference to the Extended Address.
-     *
      */
     ExtAddress &GetExtended(void) { return mShared.mExtAddress; }
 
     /**
-     * This method sets the address to none (i.e., clears the address).
+     * Sets the address to none (i.e., clears the address).
      *
      * Address type will be updated to `kTypeNone`.
-     *
      */
     void SetNone(void) { mType = kTypeNone; }
 
     /**
-     * This method sets the address with a Short Address.
+     * Sets the address with a Short Address.
      *
      * The type is also updated to indicate that address is Short.
      *
      * @param[in]  aShortAddress  A Short Address
-     *
      */
     void SetShort(ShortAddress aShortAddress)
     {
@@ -348,12 +327,11 @@ public:
     }
 
     /**
-     * This method sets the address with an Extended Address.
+     * Sets the address with an Extended Address.
      *
      * The type is also updated to indicate that the address is Extended.
      *
      * @param[in]  aExtAddress  An Extended Address
-     *
      */
     void SetExtended(const ExtAddress &aExtAddress)
     {
@@ -362,14 +340,13 @@ public:
     }
 
     /**
-     * This method sets the address with an Extended Address given as a byte array.
+     * Sets the address with an Extended Address given as a byte array.
      *
      * The type is also updated to indicate that the address is Extended.
      *
      * @param[in] aBuffer    Pointer to an array containing the Extended Address. `OT_EXT_ADDRESS_SIZE` bytes from
      *                       buffer are copied to form the Extended Address.
      * @param[in] aByteOrder The byte order to copy the address from @p aBuffer.
-     *
      */
     void SetExtended(const uint8_t *aBuffer, ExtAddress::CopyByteOrder aByteOrder = ExtAddress::kNormalByteOrder)
     {
@@ -378,26 +355,33 @@ public:
     }
 
     /**
-     * This method indicates whether or not the address is a Short Broadcast Address.
+     * Indicates whether or not the address is a Short Broadcast Address.
      *
      * @returns TRUE if address is Short Broadcast Address, FALSE otherwise.
-     *
      */
     bool IsBroadcast(void) const { return ((mType == kTypeShort) && (GetShort() == kShortAddrBroadcast)); }
 
     /**
-     * This method indicates whether or not the address is a Short Invalid Address.
+     * Indicates whether or not the address is a Short Invalid Address.
      *
      * @returns TRUE if address is Short Invalid Address, FALSE otherwise.
-     *
      */
     bool IsShortAddrInvalid(void) const { return ((mType == kTypeShort) && (GetShort() == kShortAddrInvalid)); }
 
     /**
-     * This method converts an address to a null-terminated string
+     * Overloads operator `==` to evaluate whether or not two `Address` instances are equal.
+     *
+     * @param[in]  aOther  The other `Address` instance to compare with.
+     *
+     * @retval TRUE   If the two `Address` instances are equal.
+     * @retval FALSE  If the two `Address` instances are not equal.
+     */
+    bool operator==(const Address &aOther) const;
+
+    /**
+     * Converts an address to a null-terminated string
      *
      * @returns A `String` representing the address.
-     *
      */
     InfoString ToString(void) const;
 
@@ -412,8 +396,85 @@ private:
 };
 
 /**
- * This class represents a MAC key.
- *
+ * Represents two MAC addresses corresponding to source and destination.
+ */
+struct Addresses
+{
+    Address mSource;      ///< Source address.
+    Address mDestination; ///< Destination address.
+};
+
+/**
+ * Represents two PAN IDs corresponding to source and destination.
+ */
+class PanIds : public Clearable<PanIds>
+{
+public:
+    /**
+     * Initializes PAN IDs as empty (no source or destination PAN ID).
+     */
+    PanIds(void) { Clear(); }
+
+    /**
+     * Indicates whether or not source PAN ID is present.
+     *
+     * @retval TRUE   The source PAN ID is present.
+     * @retval FALSE  The source PAN ID is not present.
+     */
+    bool IsSourcePresent(void) const { return mIsSourcePresent; }
+
+    /**
+     * Gets the source PAN ID when it is present.
+     *
+     * @returns The source PAN ID.
+     */
+    PanId GetSource(void) const { return mSource; }
+
+    /**
+     * Indicates whether or not destination PAN ID is present.
+     *
+     * @retval TRUE   The destination PAN ID is present.
+     * @retval FALSE  The destination PAN ID is not present.
+     */
+    bool IsDestinationPresent(void) const { return mIsDestinationPresent; }
+
+    /**
+     * Gets the destination PAN ID when it is present.
+     *
+     * @returns The destination PAN ID.
+     */
+    PanId GetDestination(void) const { return mDestination; }
+
+    /**
+     * Sets the source PAN ID.
+     *
+     * @param[in] aPanId  The source PAN ID.
+     */
+    void SetSource(PanId aPanId);
+
+    /**
+     * Sets the destination PAN ID.
+     *
+     * @param[in] aPanId  The source PAN ID.
+     */
+    void SetDestination(PanId aPanId);
+
+    /**
+     * Sets both source and destination PAN IDs to the same value.
+     *
+     * @param[in] aPanId  The PAN ID.
+     */
+    void SetBothSourceDestination(PanId aPanId);
+
+private:
+    PanId mSource;
+    PanId mDestination;
+    bool  mIsSourcePresent;
+    bool  mIsDestinationPresent;
+};
+
+/**
+ * Represents a MAC key.
  */
 OT_TOOL_PACKED_BEGIN
 class Key : public otMacKey, public Equatable<Key>, public Clearable<Key>
@@ -422,31 +483,27 @@ public:
     static constexpr uint16_t kSize = OT_MAC_KEY_SIZE; ///< Key size in bytes.
 
     /**
-     * This method gets a pointer to the bytes array containing the key
+     * Gets a pointer to the bytes array containing the key
      *
      * @returns A pointer to the byte array containing the key.
-     *
      */
     const uint8_t *GetBytes(void) const { return m8; }
 
 } OT_TOOL_PACKED_END;
 
 /**
- * This type represents a MAC Key Ref used by PSA.
- *
+ * Represents a MAC Key Ref used by PSA.
  */
 typedef otMacKeyRef KeyRef;
 
 /**
- * This class represents a MAC Key Material.
- *
+ * Represents a MAC Key Material.
  */
 class KeyMaterial : public otMacKeyMaterial, public Unequatable<KeyMaterial>
 {
 public:
     /**
-     * This constructor initializes a `KeyMaterial`.
-     *
+     * Initializes a `KeyMaterial`.
      */
     KeyMaterial(void)
     {
@@ -458,7 +515,7 @@ public:
 
 #if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
     /**
-     * This method overload `=` operator to assign the `KeyMaterial` from another one.
+     * Overload `=` operator to assign the `KeyMaterial` from another one.
      *
      * If the `KeyMaterial` currently stores a valid and different `KeyRef`, the assignment of new value will ensure to
      * delete the previous one before using the new `KeyRef` from @p aOther.
@@ -466,7 +523,6 @@ public:
      * @param[in] aOther  aOther  The other `KeyMaterial` instance to assign from.
      *
      * @returns A reference to the current `KeyMaterial`
-     *
      */
     KeyMaterial &operator=(const KeyMaterial &aOther);
 
@@ -478,31 +534,28 @@ public:
      *
      * Under `OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE`, if the `KeyMaterial` currently stores a valid previous
      * `KeyRef`, the `Clear()` call will ensure to delete the previous `KeyRef` and set it to `kInvalidKeyRef`.
-     *
      */
     void Clear(void);
 
 #if !OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
     /**
-     * This method gets the literal `Key`.
+     * Gets the literal `Key`.
      *
      * @returns The literal `Key`
-     *
      */
     const Key &GetKey(void) const { return static_cast<const Key &>(mKeyMaterial.mKey); }
 
 #else
     /**
-     * This method gets the stored `KeyRef`
+     * Gets the stored `KeyRef`
      *
      * @returns The `KeyRef`
-     *
      */
     KeyRef GetKeyRef(void) const { return mKeyMaterial.mKeyRef; }
 #endif
 
     /**
-     * This method sets the `KeyMaterial` from a given Key.
+     * Sets the `KeyMaterial` from a given Key.
      *
      * If the `KeyMaterial` currently stores a valid `KeyRef`, the `SetFrom()` call will ensure to delete the previous
      * one before creating and using a new `KeyRef` associated with the new `Key`.
@@ -510,34 +563,30 @@ public:
      * @param[in] aKey           A reference to the new key.
      * @param[in] aIsExportable  Boolean indicating if the key is exportable (this is only applicable under
      *                           `OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE` config).
-     *
      */
     void SetFrom(const Key &aKey, bool aIsExportable = false);
 
     /**
-     * This method extracts the literal key from `KeyMaterial`
+     * Extracts the literal key from `KeyMaterial`
      *
      * @param[out] aKey  A reference to the output the key.
-     *
      */
-    void ExtractKey(Key &aKey);
+    void ExtractKey(Key &aKey) const;
 
     /**
-     * This method converts `KeyMaterial` to a `Crypto::Key`.
+     * Converts `KeyMaterial` to a `Crypto::Key`.
      *
      * @param[out]  aCryptoKey  A reference to a `Crypto::Key` to populate.
-     *
      */
     void ConvertToCryptoKey(Crypto::Key &aCryptoKey) const;
 
     /**
-     * This method overloads operator `==` to evaluate whether or not two `KeyMaterial` instances are equal.
+     * Overloads operator `==` to evaluate whether or not two `KeyMaterial` instances are equal.
      *
      * @param[in]  aOther  The other `KeyMaterial` instance to compare with.
      *
      * @retval TRUE   If the two `KeyMaterial` instances are equal.
      * @retval FALSE  If the two `KeyMaterial` instances are not equal.
-     *
      */
     bool operator==(const KeyMaterial &aOther) const;
 
@@ -555,8 +604,7 @@ private:
 #if OPENTHREAD_CONFIG_MULTI_RADIO
 
 /**
- * This enumeration defines the radio link types.
- *
+ * Defines the radio link types.
  */
 enum RadioType : uint8_t
 {
@@ -570,14 +618,12 @@ enum RadioType : uint8_t
 
 /**
  * This constant specifies the number of supported radio link types.
- *
  */
 constexpr uint8_t kNumRadioTypes = (((OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE) ? 1 : 0) +
                                     ((OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE) ? 1 : 0));
 
 /**
- * This class represents a set of radio links.
- *
+ * Represents a set of radio links.
  */
 class RadioTypes
 {
@@ -585,20 +631,17 @@ public:
     static constexpr uint16_t kInfoStringSize = 32; ///< Max chars for the info string (`ToString()`).
 
     /**
-     * This type defines the fixed-length `String` object returned from `ToString()`.
-     *
+     * Defines the fixed-length `String` object returned from `ToString()`.
      */
     typedef String<kInfoStringSize> InfoString;
 
     /**
      * This static class variable defines an array containing all supported radio link types.
-     *
      */
     static const RadioType kAllRadioTypes[kNumRadioTypes];
 
     /**
-     * This constructor initializes a `RadioTypes` object as empty set
-     *
+     * Initializes a `RadioTypes` object as empty set
      */
     RadioTypes(void)
         : mBitMask(0)
@@ -606,10 +649,9 @@ public:
     }
 
     /**
-     * This constructor initializes a `RadioTypes` object with a given bit-mask.
+     * Initializes a `RadioTypes` object with a given bit-mask.
      *
      * @param[in] aMask   A bit-mask representing the radio types (the first bit corresponds to radio type 0, and so on)
-     *
      */
     explicit RadioTypes(uint8_t aMask)
         : mBitMask(aMask)
@@ -617,16 +659,14 @@ public:
     }
 
     /**
-     * This method clears the set.
-     *
+     * Clears the set.
      */
     void Clear(void) { mBitMask = 0; }
 
     /**
-     * This method indicates whether the set is empty or not
+     * Indicates whether the set is empty or not
      *
      * @returns TRUE if the set is empty, FALSE otherwise.
-     *
      */
     bool IsEmpty(void) const { return (mBitMask == 0); }
 
@@ -634,76 +674,67 @@ public:
      *  This method indicates whether the set contains only a single radio type.
      *
      * @returns TRUE if the set contains a single radio type, FALSE otherwise.
-     *
      */
     bool ContainsSingleRadio(void) const { return !IsEmpty() && ((mBitMask & (mBitMask - 1)) == 0); }
 
     /**
-     * This method indicates whether or not the set contains a given radio type.
+     * Indicates whether or not the set contains a given radio type.
      *
      * @param[in] aType  A radio link type.
      *
      * @returns TRUE if the set contains @p aType, FALSE otherwise.
-     *
      */
     bool Contains(RadioType aType) const { return ((mBitMask & BitFlag(aType)) != 0); }
 
     /**
-     * This method adds a radio type to the set.
+     * Adds a radio type to the set.
      *
      * @param[in] aType  A radio link type.
-     *
      */
     void Add(RadioType aType) { mBitMask |= BitFlag(aType); }
 
     /**
-     * This method adds another radio types set to the current one.
+     * Adds another radio types set to the current one.
      *
      * @param[in] aTypes   A radio link type set to add.
-     *
      */
     void Add(RadioTypes aTypes) { mBitMask |= aTypes.mBitMask; }
 
     /**
-     * This method adds all radio types supported by device to the set.
-     *
+     * Adds all radio types supported by device to the set.
      */
     void AddAll(void);
 
     /**
-     * This method removes a given radio type from the set.
+     * Removes a given radio type from the set.
      *
      * @param[in] aType  A radio link type.
-     *
      */
     void Remove(RadioType aType) { mBitMask &= ~BitFlag(aType); }
 
     /**
-     * This method gets the radio type set as a bitmask.
+     * Gets the radio type set as a bitmask.
      *
      * The first bit in the mask corresponds to first radio type (radio type with value zero), and so on.
      *
      * @returns A bitmask representing the set of radio types.
-     *
      */
     uint8_t GetAsBitMask(void) const { return mBitMask; }
 
     /**
-     * This method overloads operator `-` to return a new set which is the set difference between current set and
+     * Overloads operator `-` to return a new set which is the set difference between current set and
      * a given set.
      *
      * @param[in] aOther  Another radio type set.
      *
      * @returns A new set which is set difference between current one and @p aOther.
-     *
      */
     RadioTypes operator-(const RadioTypes &aOther) const { return RadioTypes(mBitMask & ~aOther.mBitMask); }
 
     /**
-     * This method converts the radio set to human-readable string.
+     * Converts the radio set to human-readable string.
      *
      * @return A string representation of the set of radio types.
-     *
      */
     InfoString ToString(void) const;
 
@@ -714,58 +745,52 @@ private:
 };
 
 /**
- * This function converts a link type to a string
+ * Converts a link type to a string
  *
  * @param[in] aRadioType  A link type value.
  *
  * @returns A string representation of the link type.
- *
  */
 const char *RadioTypeToString(RadioType aRadioType);
 
 #endif // OPENTHREAD_CONFIG_MULTI_RADIO
 
 /**
- * This class represents Link Frame Counters for all supported radio links.
- *
+ * Represents Link Frame Counters for all supported radio links.
  */
 class LinkFrameCounters
 {
 public:
     /**
-     * This method resets all counters (set them all to zero).
-     *
+     * Resets all counters (set them all to zero).
      */
     void Reset(void) { SetAll(0); }
 
 #if OPENTHREAD_CONFIG_MULTI_RADIO
 
     /**
-     * This method gets the link Frame Counter for a given radio link.
+     * Gets the link Frame Counter for a given radio link.
      *
      * @param[in] aRadioType  A radio link type.
      *
      * @returns The Link Frame Counter for radio link @p aRadioType.
-     *
      */
     uint32_t Get(RadioType aRadioType) const;
 
     /**
-     * This method sets the Link Frame Counter for a given radio link.
+     * Sets the Link Frame Counter for a given radio link.
      *
      * @param[in] aRadioType  A radio link type.
      * @param[in] aCounter    The new counter value.
-     *
      */
     void Set(RadioType aRadioType, uint32_t aCounter);
 
 #else
 
     /**
-     * This method gets the Link Frame Counter value.
+     * Gets the Link Frame Counter value.
      *
      * @return The Link Frame Counter value.
-     *
      */
     uint32_t Get(void) const
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
@@ -779,10 +804,9 @@ public:
 #endif
 
     /**
-     * This method sets the Link Frame Counter for a given radio link.
+     * Sets the Link Frame Counter for a given radio link.
      *
      * @param[in] aCounter    The new counter value.
-     *
      */
     void Set(uint32_t aCounter)
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
@@ -799,51 +823,45 @@ public:
 
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
     /**
-     * This method gets the Link Frame Counter for 802.15.4 radio link.
+     * Gets the Link Frame Counter for 802.15.4 radio link.
      *
      * @returns The Link Frame Counter for 802.15.4 radio link.
-     *
      */
     uint32_t Get154(void) const { return m154Counter; }
 
     /**
-     * This method sets the Link Frame Counter for 802.15.4 radio link.
+     * Sets the Link Frame Counter for 802.15.4 radio link.
      *
      * @param[in] aCounter   The new counter value.
-     *
      */
     void Set154(uint32_t aCounter) { m154Counter = aCounter; }
 #endif
 
 #if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
     /**
-     * This method gets the Link Frame Counter for TREL radio link.
+     * Gets the Link Frame Counter for TREL radio link.
      *
      * @returns The Link Frame Counter for TREL radio link.
-     *
      */
     uint32_t GetTrel(void) const { return mTrelCounter; }
 
     /**
-     * This method increments the Link Frame Counter for TREL radio link.
-     *
+     * Increments the Link Frame Counter for TREL radio link.
      */
     void IncrementTrel(void) { mTrelCounter++; }
 #endif
 
     /**
-     * This method gets the maximum Link Frame Counter among all supported radio links.
+     * Gets the maximum Link Frame Counter among all supported radio links.
      *
      * @return The maximum Link frame Counter among all supported radio links.
-     *
      */
     uint32_t GetMaximum(void) const;
 
     /**
-     * This method sets the Link Frame Counter value for all radio links.
+     * Sets the Link Frame Counter value for all radio links.
      *
      * @param[in]  aCounter  The Link Frame Counter value.
-     *
      */
     void SetAll(uint32_t aCounter);
 
@@ -857,8 +875,67 @@ private:
 };
 
 /**
+ * Represents CSL accuracy.
+ */
+class CslAccuracy
+{
+public:
+    static constexpr uint8_t kWorstClockAccuracy = 255; ///< Worst possible crystal accuracy, in units of ± ppm.
+    static constexpr uint8_t kWorstUncertainty   = 255; ///< Worst possible uncertainty, in units of 10 microseconds.
+
+    /**
+     * Initializes the CSL accuracy using `kWorstClockAccuracy` and `kWorstUncertainty` values.
+     */
+    void Init(void)
+    {
+        mClockAccuracy = kWorstClockAccuracy;
+        mUncertainty   = kWorstUncertainty;
+    }
+
+    /**
+     * Returns the CSL clock accuracy.
+     *
+     * @returns The CSL clock accuracy in ± ppm.
+     */
+    uint8_t GetClockAccuracy(void) const { return mClockAccuracy; }
+
+    /**
+     * Sets the CSL clock accuracy.
+     *
+     * @param[in]  aClockAccuracy  The CSL clock accuracy in ± ppm.
+     */
+    void SetClockAccuracy(uint8_t aClockAccuracy) { mClockAccuracy = aClockAccuracy; }
+
+    /**
+     * Returns the CSL uncertainty.
+     *
+     * @returns The uncertainty in units 10 microseconds.
+     */
+    uint8_t GetUncertainty(void) const { return mUncertainty; }
+
+    /**
+     * Gets the CLS uncertainty in microseconds.
+     *
+     * @returns the CLS uncertainty in microseconds.
+     */
+    uint16_t GetUncertaintyInMicrosec(void) const { return static_cast<uint16_t>(mUncertainty) * kUsPerUncertUnit; }
+
+    /**
+     * Sets the CSL uncertainty.
+     *
+     * @param[in]  aUncertainty  The CSL uncertainty in units 10 microseconds.
+     */
+    void SetUncertainty(uint8_t aUncertainty) { mUncertainty = aUncertainty; }
+
+private:
+    static constexpr uint8_t kUsPerUncertUnit = 10;
+
+    uint8_t mClockAccuracy;
+    uint8_t mUncertainty;
+};
+
+/**
  * @}
- *
  */
 
 } // namespace Mac

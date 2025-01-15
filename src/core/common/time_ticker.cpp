@@ -33,19 +33,14 @@
 
 #include "time_ticker.hpp"
 
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/instance.hpp"
-#include "common/locator_getters.hpp"
-#include "common/random.hpp"
-#include "thread/mle_router.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 
 TimeTicker::TimeTicker(Instance &aInstance)
     : InstanceLocator(aInstance)
     , mReceivers(0)
-    , mTimer(aInstance, HandleTimer)
+    , mTimer(aInstance)
 {
 }
 
@@ -67,11 +62,6 @@ void TimeTicker::UnregisterReceiver(Receiver aReceiver)
     {
         mTimer.Stop();
     }
-}
-
-void TimeTicker::HandleTimer(Timer &aTimer)
-{
-    aTimer.Get<TimeTicker>().HandleTimer();
 }
 
 void TimeTicker::HandleTimer(void)
@@ -101,12 +91,10 @@ void TimeTicker::HandleTimer(void)
     }
 #endif
 
-#if OPENTHREAD_CONFIG_CHILD_SUPERVISION_ENABLE
     if (mReceivers & Mask(kChildSupervisor))
     {
-        Get<Utils::ChildSupervisor>().HandleTimeTick();
+        Get<ChildSupervisor>().HandleTimeTick();
     }
-#endif
 #endif // OPENTHREAD_FTD
 
 #if OPENTHREAD_CONFIG_IP6_FRAGMENTATION_ENABLE
@@ -127,6 +115,18 @@ void TimeTicker::HandleTimer(void)
     if (mReceivers & Mask(kMlrManager))
     {
         Get<MlrManager>().HandleTimeTick();
+    }
+#endif
+
+    if (mReceivers & Mask(kIp6Mpl))
+    {
+        Get<Ip6::Mpl>().HandleTimeTick();
+    }
+
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_BACKBONE_ROUTER_ENABLE
+    if (mReceivers & Mask(kBbrLocal))
+    {
+        Get<BackboneRouter::Local>().HandleTimeTick();
     }
 #endif
 }

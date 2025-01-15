@@ -34,10 +34,7 @@
 
 #if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
 
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/instance.hpp"
-#include "common/locator_getters.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 namespace Trel {
@@ -94,7 +91,8 @@ Header::InfoString Header::ToString(void) const
         break;
     }
 
-    string.Append(" panid:%04x num:%lu src:%s", GetPanId(), GetPacketNumber(), GetSource().ToString().AsCString());
+    string.Append(" panid:%04x num:%lu src:%s", GetPanId(), ToUlong(GetPacketNumber()),
+                  GetSource().ToString().AsCString());
 
     if ((type == kTypeUnicast) || (type == kTypeAck))
     {
